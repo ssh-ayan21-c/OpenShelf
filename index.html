@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>College Library Management System (CLMS)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="logo.png" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img
+            class="brand-logo-img"
+            src="logo.png"
+            alt="College Library logo"
+            loading="eager"
+          />
+          <span class="brand-subtitle">College Library</span>
+        </div>
+        <div class="role-switcher">
+          <label for="roleSelect">Viewing as</label>
+          <select id="roleSelect">
+            <option value="user">User (Student/Faculty)</option>
+            <option value="admin">Admin / Librarian</option>
+          </select>
+        </div>
+        <nav class="nav">
+          <button class="nav-link active" data-section="dashboard">Dashboard</button>
+          <button class="nav-link" data-section="books">Books</button>
+          <button class="nav-link" data-section="borrowed">My Borrowed Books</button>
+          <button class="nav-link" data-section="reservations">Reservations</button>
+          <button class="nav-link" data-section="fines">Fines & Payments</button>
+          <button class="nav-link" data-section="transactions">Transactions</button>
+          <button class="nav-link" data-section="archives">Archives</button>
+          <button class="nav-link" data-section="suggestions">Suggestions & Voting</button>
+          <button class="nav-link" data-section="donations">Donations</button>
+          <button class="nav-link" data-section="admin-reports">Admin Reports</button>
+          <button class="nav-link" data-section="profile">Profile</button>
+        </nav>
+        <footer class="sidebar-footer">
+          <small>CS 388 • Full Stack Development Project</small>
+        </footer>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="topbar-title">
+            <img src="logo.png" alt="College Library logo" class="title-logo" />
+            <div>
+              <h1>College Library Management System</h1>
+              <p id="topbarSubtitle">User Dashboard</p>
+            </div>
+          </div>
+          <div class="topbar-user">
+            <span id="mockUserName">Hi, Ayan</span>
+            <button id="mockLoginToggle" class="btn-secondary">Mock Login</button>
+          </div>
+        </header>
+
+        <section id="dashboard" class="section section-active">
+          <div class="grid-3">
+            <div class="card stat-card">
+              <h3>Total Books</h3>
+              <p class="stat-number" id="statTotalBooks">0</p>
+              <p class="stat-subtitle">Books in catalog</p>
+            </div>
+            <div class="card stat-card">
+              <h3>Total Users</h3>
+              <p class="stat-number" id="statTotalUsers">0</p>
+              <p class="stat-subtitle">Registered users</p>
+            </div>
+            <div class="card stat-card">
+              <h3>My Borrowed Books</h3>
+              <p class="stat-number" id="statMyBorrowed">0</p>
+              <p class="stat-subtitle">Currently issued</p>
+            </div>
+          </div>
+
+          <div class="grid-2 mt-lg">
+            <div class="card">
+              <div class="card-header">
+                <h2>Top 5 Available Books</h2>
+              </div>
+              <table class="table" id="topBooksTable">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Genre</th>
+                    <th>Added</th>
+                    <th>Available</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2>Recommended For You</h2>
+                <span class="chip">Based on last 10 borrows</span>
+              </div>
+              <div id="recommendationsList" class="card-list"></div>
+            </div>
+          </div>
+
+          <div class="grid-2 mt-lg">
+            <div class="card">
+              <div class="card-header">
+                <h2>Borrowed Books Summary</h2>
+              </div>
+              <ul id="borrowedSummaryList" class="timeline"></ul>
+            </div>
+            <div class="card admin-only">
+              <div class="card-header">
+                <h2>Extend Due Date (Admin Tool)</h2>
+              </div>
+              <form id="extendDueForm" class="form-inline">
+                <input type="text" id="extendIsbn" placeholder="ISBN" required />
+                <input type="email" id="extendEmail" placeholder="User email" required />
+                <input type="number" id="extendDays" placeholder="Extra days" min="1" max="30" required />
+                <button class="btn-primary" type="submit">Extend</button>
+              </form>
+              <p class="form-help">This is a front-end demo; action is simulated only.</p>
+              <div id="extendResult" class="form-result"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="books" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h2>Book Catalog</h2>
+              <div class="chip-group">
+                <span class="chip">Search</span>
+                <span class="chip">Sort</span>
+                <span class="chip">Filter</span>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <input type="text" id="bookSearch" placeholder="Search by title, author, or ISBN..." />
+              <select id="bookSort">
+                <option value="title">Title (A–Z)</option>
+                <option value="author">Author (A–Z)</option>
+                <option value="quantity">Quantity available</option>
+                <option value="dateAdded">Date added (newest)</option>
+              </select>
+              <select id="bookAvailability">
+                <option value="all">All</option>
+                <option value="available">Available</option>
+                <option value="unavailable">Unavailable</option>
+              </select>
+            </div>
+
+            <div id="booksGrid" class="cards-grid"></div>
+          </div>
+
+          <div class="card admin-only mt-lg">
+            <div class="card-header">
+              <h2>Add / Edit Book (Mock)</h2>
+            </div>
+            <form id="bookForm" class="form-grid">
+              <input type="text" id="bookIsbn" placeholder="ISBN" required />
+              <input type="text" id="bookTitle" placeholder="Title" required />
+              <input type="text" id="bookAuthor" placeholder="Author" required />
+              <input type="text" id="bookGenre" placeholder="Genre" required />
+              <input type="number" id="bookYear" placeholder="Publication year" />
+              <input type="number" id="bookQuantity" placeholder="Quantity" min="1" />
+              <textarea id="bookDescription" placeholder="Description"></textarea>
+              <button class="btn-primary" type="submit">Add to Mock Catalog</button>
+            </form>
+            <p class="form-help">In the real system this would upload to MongoDB & Cloudinary; here we just show it live on the page using JavaScript.</p>
+          </div>
+        </section>
+
+        <section id="borrowed" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h2>My Borrowed Books</h2>
+            </div>
+            <table class="table" id="borrowedTable">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Due date</th>
+                  <th>Status</th>
+                  <th>Days left</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="reservations" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h2>Reservations (Queue Demo)</h2>
+            </div>
+            <p>This front-end demo simulates the automated reservation queue described in the report.</p>
+            <div class="grid-2 mt">
+              <div>
+                <h3>Reserve a Book</h3>
+                <form id="reservationForm" class="form-grid">
+                  <input type="text" id="reservationIsbn" placeholder="ISBN" required />
+                  <input type="text" id="reservationUser" placeholder="Your name" required />
+                  <button class="btn-primary" type="submit">Add to Queue</button>
+                </form>
+              </div>
+              <div>
+                <h3>Simulate Book Return</h3>
+                <form id="reservationProcessForm" class="form-grid">
+                  <input type="text" id="reservationProcessIsbn" placeholder="ISBN" required />
+                  <button class="btn-secondary" type="submit">Process Next in Queue</button>
+                </form>
+              </div>
+            </div>
+            <div class="grid-2 mt-lg">
+              <div>
+                <h3>Active Queue</h3>
+                <ul id="reservationQueueList" class="list"></ul>
+              </div>
+              <div>
+                <h3>History</h3>
+                <ul id="reservationHistoryList" class="list small"></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="fines" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h2>My Fines</h2>
+              <span class="chip chip-danger" id="fineTotalChip">₹0</span>
+            </div>
+            <p>This simulates the automated fine calculation and Razorpay payment described in the report.</p>
+            <table class="table" id="finesTable">
+              <thead>
+                <tr>
+                  <th>Book</th>
+                  <th>Days overdue</th>
+                  <th>Amount (₹)</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="transactions" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h2>My Transactions</h2>
+            </div>
+            <table class="table" id="transactionsTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Details</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="archives" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h2>Digital Archives</h2>
+            </div>
+            <div class="toolbar">
+              <input type="text" id="archiveSearch" placeholder="Search title, description, tags..." />
+              <select id="archiveCategory">
+                <option value="all">All categories</option>
+                <option>Research Papers</option>
+                <option>Thesis</option>
+                <option>Dissertations</option>
+                <option>Conference Papers</option>
+                <option>Journals</option>
+                <option>Reports</option>
+                <option>Presentations</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div id="archivesGrid" class="cards-grid"></div>
+          </div>
+        </section>
+
+        <section id="suggestions" class="section">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <h2>Suggest a Book</h2>
+              </div>
+              <form id="suggestForm" class="form-grid">
+                <input type="text" id="suggestTitle" placeholder="Title" required />
+                <input type="text" id="suggestAuthor" placeholder="Author" required />
+                <input type="text" id="suggestIsbn" placeholder="ISBN (optional)" />
+                <input type="text" id="suggestCategory" placeholder="Category" />
+                <textarea id="suggestReason" placeholder="Why should library acquire this?"></textarea>
+                <button class="btn-primary" type="submit">Submit Suggestion</button>
+              </form>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <h2>Community Suggestions & Voting</h2>
+              </div>
+              <ul id="suggestionsList" class="list votes-list"></ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="donations" class="section">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <h2>Donate a Book</h2>
+              </div>
+              <form id="donationForm" class="form-grid">
+                <input type="text" id="donorName" placeholder="Your name" required />
+                <input type="text" id="donationTitle" placeholder="Book title" required />
+                <input type="text" id="donationAuthor" placeholder="Author" required />
+                <select id="donationCondition" required>
+                  <option value="">Condition</option>
+                  <option>New</option>
+                  <option>Good</option>
+                  <option>Fair</option>
+                  <option>Poor</option>
+                </select>
+                <input type="number" id="donationQuantity" placeholder="Quantity" min="1" required />
+                <textarea id="donationNotes" placeholder="Notes (optional)"></textarea>
+                <button class="btn-primary" type="submit">Submit Donation</button>
+              </form>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <h2>Donation History</h2>
+              </div>
+              <ul id="donationHistoryList" class="timeline small"></ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="admin-reports" class="section">
+          <div class="card admin-only">
+            <div class="card-header">
+              <h2>Admin Analytics (Mock)</h2>
+            </div>
+            <div class="grid-3">
+              <div class="mini-chart">
+                <h3>Borrowing Trends</h3>
+                <div class="bar-chart" id="chartBorrowing"></div>
+              </div>
+              <div class="mini-chart">
+                <h3>Popular Categories</h3>
+                <div class="bar-chart" id="chartCategories"></div>
+              </div>
+              <div class="mini-chart">
+                <h3>Fine Collection</h3>
+                <div class="bar-chart" id="chartFines"></div>
+              </div>
+            </div>
+            <p class="form-help">These are static, front-end visualizations approximating the “Reports” section described in the project report.</p>
+          </div>
+          <p class="admin-only note">Switch to Admin/Librarian role from the left sidebar to view this section.</p>
+        </section>
+
+        <section id="profile" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h2>My Profile</h2>
+            </div>
+            <form id="profileForm" class="form-grid">
+              <input type="text" id="profileName" placeholder="Name" />
+              <input type="email" id="profileEmail" placeholder="Email" />
+              <input type="text" id="profileRoll" placeholder="Roll number / ID" />
+              <input type="text" id="profilePhone" placeholder="Phone" />
+              <textarea id="profileAddress" placeholder="Address"></textarea>
+              <button class="btn-secondary" type="button" id="profileSaveBtn">Save (local only)</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="modalBackdrop" hidden>
+      <div class="modal">
+        <button class="modal-close" id="modalClose">&times;</button>
+        <div id="modalContent"></div>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
+
