@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: openshelf-app
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: openshelf-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: openshelf
+      POSTGRES_PASSWORD: openshelf
+      POSTGRES_DB: openshelf
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openshelf"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: openshelf-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

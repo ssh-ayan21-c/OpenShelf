@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────── Enums ─────────────
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum BookStatus {
+  AVAILABLE
+  BORROWED
+  RESERVED
+  DIGITAL_ONLY
+}
+
+enum CirculationType {
+  BORROW
+  RENT
+  BUY
+}
+
+enum ReservationStatus {
+  PENDING
+  FULFILLED
+  CANCELLED
+}
+
+// ───────────── Models ─────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  isPremium Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  circulations Circulation[]
+  reservations Reservation[]
+
+  @@map("users")
+}
+
+model Book {
+  id            String     @id @default(uuid())
+  isbn          String     @unique
+  title         String
+  author        String
+  genre         String?
+  publisher     String?
+  edition       String?
+  year          Int?
+  description   String?
+  isDigital     Boolean    @default(false)
+  physicalCount Int        @default(0)
+  digitalCount  Int        @default(0)
+  shelfLocation String?
+  status        BookStatus @default(AVAILABLE)
+  coverUrl      String?
+  pdfUrl        String?
+  price         Float?
+  rentPrice     Float?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  circulations Circulation[]
+  reservations Reservation[]
+  embeddings   Embedding[]
+
+  @@map("books")
+}
+
+model Circulation {
+  id         String          @id @default(uuid())
+  userId     String
+  bookId     String
+  type       CirculationType
+  borrowDate DateTime        @default(now())
+  dueDate    DateTime?
+  returnDate DateTime?
+  createdAt  DateTime        @default(now())
+
+  user  User   @relation(fields: [userId], references: [id])
+  book  Book   @relation(fields: [bookId], references: [id])
+  fines Fine[]
+
+  @@map("circulations")
+}
+
+model Fine {
+  id            String   @id @default(uuid())
+  circulationId String
+  amount        Float
+  isPaid        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  circulation Circulation @relation(fields: [circulationId], references: [id])
+
+  @@map("fines")
+}
+
+model Reservation {
+  id        String            @id @default(uuid())
+  userId    String
+  bookId    String
+  status    ReservationStatus @default(PENDING)
+  position  Int
+  createdAt DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  book Book @relation(fields: [bookId], references: [id])
+
+  @@map("reservations")
+}
+
+model Org {
+  id         String  @id @default(uuid())
+  domainName String  @unique
+  isActive   Boolean @default(true)
+
+  @@map("orgs")
+}
+
+model Embedding {
+  id      String @id @default(uuid())
+  bookId  String
+  content String
+
+  // The vector column is added via raw SQL migration (pgvector)
+  // vector vector(1536) — see migration 00_enable_pgvector
+
+  book Book @relation(fields: [bookId], references: [id])
+
+  @@map("embeddings")
+}
