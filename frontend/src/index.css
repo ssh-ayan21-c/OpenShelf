@@ -34,40 +34,42 @@ body {
   @apply bg-gray-600;
 }
 
-/* Glassmorphism utility */
-.glass {
-  @apply bg-gray-900/50 backdrop-blur-xl border border-gray-800/50;
-}
-.glass-card {
-  @apply bg-gray-900/60 backdrop-blur-xl border border-gray-800/40 rounded-2xl;
-}
+@layer components {
+  /* Glassmorphism utility */
+  .glass {
+    @apply bg-gray-900/50 backdrop-blur-xl border border-gray-800/50;
+  }
+  .glass-card {
+    @apply bg-gray-900/60 backdrop-blur-xl border border-gray-800/40 rounded-2xl;
+  }
 
-/* Gradient text */
-.gradient-text {
-  @apply bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent;
-}
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent;
+  }
 
-/* Button styles */
-.btn-primary {
-  @apply px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-semibold rounded-xl
-         hover:from-emerald-600 hover:to-cyan-600 active:scale-[0.98] transition-all duration-200
-         shadow-lg shadow-emerald-500/20;
-}
-.btn-secondary {
-  @apply px-6 py-2.5 bg-gray-800 text-gray-200 font-semibold rounded-xl
-         hover:bg-gray-700 active:scale-[0.98] transition-all duration-200
-         border border-gray-700;
-}
-.btn-danger {
-  @apply px-6 py-2.5 bg-red-600 text-white font-semibold rounded-xl
-         hover:bg-red-700 active:scale-[0.98] transition-all duration-200;
-}
+  /* Button styles */
+  .btn-primary {
+    @apply px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-semibold rounded-xl
+           hover:from-emerald-600 hover:to-cyan-600 active:scale-[0.98] transition-all duration-200
+           shadow-lg shadow-emerald-500/20;
+  }
+  .btn-secondary {
+    @apply px-6 py-2.5 bg-gray-800 text-gray-200 font-semibold rounded-xl
+           hover:bg-gray-700 active:scale-[0.98] transition-all duration-200
+           border border-gray-700;
+  }
+  .btn-danger {
+    @apply px-6 py-2.5 bg-red-600 text-white font-semibold rounded-xl
+           hover:bg-red-700 active:scale-[0.98] transition-all duration-200;
+  }
 
-/* Input styles */
-.input-field {
-  @apply w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-gray-100
-         placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60
-         transition-all duration-200;
+  /* Input styles */
+  .input-field {
+    @apply w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-gray-100
+           placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60
+           transition-all duration-200;
+  }
 }
 
 /* Hide browser autofill decorations */
