@@ -9,6 +9,7 @@ export default function AddBook() {
   const [form, setForm] = useState({ isbn: '', title: '', author: '', genre: '', publisher: '', edition: '', year: '', description: '', isDigital: false, physicalCount: 1, digitalCount: 0, shelfLocation: '', price: '', rentPrice: '' });
   const [coverImage, setCoverImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,6 +38,28 @@ export default function AddBook() {
   };
 
   const update = (key, val) => setForm({ ...form, [key]: val });
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      setCoverImage(file);
+    } else {
+      toast.error('Please drop a valid image file');
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -69,9 +92,17 @@ export default function AddBook() {
               className="hidden" 
               id="coverUpload" 
             />
-            <label htmlFor="coverUpload" className="flex items-center justify-center gap-2 input-field cursor-pointer border-dashed border-2 hover:border-emerald-500/50 transition-colors">
-              <UploadCloud className="w-5 h-5 text-gray-400" />
-              <span className="text-gray-400">{coverImage ? coverImage.name : 'Choose a cover image...'}</span>
+            <label 
+              htmlFor="coverUpload" 
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`flex items-center justify-center gap-2 input-field cursor-pointer border-dashed border-2 transition-colors ${isDragging ? 'border-emerald-500 bg-emerald-500/10' : 'hover:border-emerald-500/50'}`}
+            >
+              <UploadCloud className={`w-5 h-5 ${isDragging ? 'text-emerald-400' : 'text-gray-400'}`} />
+              <span className={isDragging ? 'text-emerald-400 font-medium' : 'text-gray-400'}>
+                {isDragging ? 'Drop image here...' : (coverImage ? coverImage.name : 'Choose or drop a cover image...')}
+              </span>
             </label>
           </div>
         </div>
