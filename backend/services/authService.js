@@ -28,14 +28,28 @@ async function register({ email, password, name }) {
     });
 
     const token = generateToken(user);
-    return { user: sanitizeUser(user), token };
+    const safeUser = sanitizeUser(user);
+    safeUser.borrowedCount = 0;
+
+    return { user: safeUser, token };
 }
 
 /**
  * Login with email + password. Returns JWT.
  */
 async function login({ email, password }) {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ 
+        where: { email },
+        include: {
+            _count: {
+                select: {
+                    circulations: {
+                        where: { type: 'BORROW' }
+                    }
+                }
+            }
+        }
+    });
     if (!user) throw new AppError('Invalid credentials.', 401);
 
     const valid = await bcrypt.compare(password, user.password);
@@ -49,7 +63,10 @@ async function login({ email, password }) {
     }
 
     const token = generateToken(user);
-    return { user: sanitizeUser(user), token };
+    const safeUser = sanitizeUser(user);
+    safeUser.borrowedCount = user._count.circulations;
+
+    return { user: safeUser, token };
 }
 
 /**

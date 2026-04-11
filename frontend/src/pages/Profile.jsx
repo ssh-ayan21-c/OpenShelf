@@ -20,11 +20,10 @@ export default function Profile() {
   const getRankData = (count, role) => {
     if (role === 'ADMIN') return null;
     const c = count || 0;
-    if (c <= 2) return { title: 'Vidyarthi (Student)', colors: 'from-slate-400 to-gray-500', badge: 'bg-slate-500/20 text-slate-300 border-slate-500/30' };
-    if (c <= 5) return { title: 'Jigyasu (Curious)', colors: 'from-cyan-400 to-blue-500', badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' };
-    if (c <= 10) return { title: 'Gyani (Knowledgeable)', colors: 'from-emerald-400 to-teal-500', badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
-    if (c <= 20) return { title: 'Vidwan (Scholar)', colors: 'from-purple-400 to-indigo-500', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/30' };
-    return { title: 'Rishi (Sage)', colors: 'from-amber-400 to-orange-500', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+    if (c >= 5) return { title: 'Medhaavi', colors: 'from-red-600 to-rose-700', badge: 'bg-red-500/20 text-red-300 border-red-500/30' };
+    if (c >= 3) return { title: 'Vidvaan', colors: 'from-orange-500 to-amber-600', badge: 'bg-orange-500/20 text-orange-300 border-orange-500/30' };
+    if (c >= 1) return { title: 'Prabuddh', colors: 'from-purple-600 to-fuchsia-600', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/30' };
+    return { title: 'Bauddhik', colors: 'from-gray-900 to-black', badge: 'bg-gray-800/80 text-gray-300 border-gray-700' };
   };
 
   const rank = getRankData(user?.borrowedCount, user?.role);
