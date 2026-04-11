@@ -2,7 +2,6 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
@@ -48,9 +47,6 @@ app.use((req, res, next) => {
     logger.info(`Incoming ${req.method} request to ${req.originalUrl}`);
     next();
 });
-
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // --------------- Health Check ---------------
 app.get('/api/health', (_req, res) => {

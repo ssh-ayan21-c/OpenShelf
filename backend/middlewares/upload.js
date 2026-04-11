@@ -1,17 +1,7 @@
 const multer = require('multer');
-const path = require('path');
 const { AppError } = require('./errorHandler');
 
-const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-        cb(null, path.join(__dirname, '..', 'uploads'));
-    },
-    filename: (_req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        const ext = path.extname(file.originalname);
-        cb(null, `${unique}${ext}`);
-    },
-});
+const storage = multer.memoryStorage();
 
 const pdfFilter = (_req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
@@ -41,4 +31,22 @@ const uploadImage = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB for images
 });
 
-module.exports = { upload, uploadImage };
+const mixedFileFilter = (_req, file, cb) => {
+    if (file.fieldname === 'pdf') return pdfFilter(_req, file, cb);
+    if (file.fieldname === 'cover') return imageFilter(_req, file, cb);
+    return cb(new AppError(`Unexpected file field: ${file.fieldname}`, 400), false);
+};
+
+const uploadBookAssets = multer({
+    storage,
+    fileFilter: mixedFileFilter,
+    limits: {
+        fileSize: 50 * 1024 * 1024,
+        files: 2,
+    },
+}).fields([
+    { name: 'pdf', maxCount: 1 },
+    { name: 'cover', maxCount: 1 },
+]);
+
+module.exports = { upload, uploadImage, uploadBookAssets };

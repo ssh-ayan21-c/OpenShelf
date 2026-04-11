@@ -1,5 +1,9 @@
 const { PrismaClient } = require('@prisma/client');
+const path = require('path');
+const crypto = require('crypto');
 const { AppError } = require('../middlewares/errorHandler');
+const { supabaseAdmin } = require('../config/supabaseClient');
+const { generateEmbedding } = require('./ragService');
 
 const prisma = new PrismaClient();
 
@@ -87,37 +91,135 @@ async function deleteBook(id) {
 }
 
 /**
- * Upload a charity book (PDF with metadata).
+ * Upload a cover image for a book.
  */
-async function uploadCharityBook({ isbn, title, author, genre, description, pdfPath }) {
-    const book = await prisma.book.create({
-        data: {
-            isbn,
-            title,
-            author,
-            genre,
-            description,
-            isDigital: true,
-            digitalCount: 1,
-            physicalCount: 0,
-            pdfUrl: pdfPath,
-            status: 'DIGITAL_ONLY',
-        },
-    });
-    return book;
+async function uploadCoverBook(id, coverFile) {
+    if (!coverFile?.buffer) {
+        throw new AppError('Cover image buffer is required.', 400);
+    }
+
+    const coverStoragePath = buildStoragePath('book-covers', coverFile.originalname);
+    const coverUpload = await supabaseAdmin.storage
+        .from('book-covers')
+        .upload(coverStoragePath, coverFile.buffer, {
+            contentType: coverFile.mimetype,
+            upsert: false,
+        });
+
+    if (coverUpload.error) {
+        throw new AppError(`Failed to upload cover image: ${coverUpload.error.message}`, 500);
+    }
+
+    const { data: publicUrlData } = supabaseAdmin.storage
+        .from('book-covers')
+        .getPublicUrl(coverStoragePath);
+
+    const { data, error } = await supabaseAdmin
+        .from('books')
+        .update({ cover_url: publicUrlData.publicUrl })
+        .eq('id', id)
+        .select('*')
+        .single();
+
+    if (error) {
+        await deleteObjectIfExists('book-covers', coverStoragePath);
+
+        if (error.code === 'PGRST116') {
+            throw new AppError('Book not found.', 404);
+        }
+        throw new AppError(`Failed to update cover URL: ${error.message}`, 500);
+    }
+
+    return data;
+}
+
+function buildStoragePath(prefix, originalName = '') {
+    const ext = path.extname(originalName).toLowerCase();
+    const safeExt = ext && ext.length <= 10 ? ext : '';
+    return `${prefix}/${Date.now()}-${crypto.randomUUID()}${safeExt}`;
+}
+
+async function deleteObjectIfExists(bucket, objectPath) {
+    if (!objectPath) return;
+
+    await supabaseAdmin.storage.from(bucket).remove([objectPath]);
+}
+
+function toVectorLiteral(vector) {
+    return `[${vector.join(',')}]`;
 }
 
 /**
- * Upload a cover image for a book.
+ * Upload PDF + optional cover to Supabase Storage and create a books record.
  */
-async function uploadCoverBook(id, coverUrl) {
-    const book = await prisma.book.findUnique({ where: { id } });
-    if (!book) throw new AppError('Book not found.', 404);
-    
-    return prisma.book.update({
-        where: { id },
-        data: { coverUrl },
-    });
+async function uploadCharityBookToSupabase({ title, author, description, pdfFile, coverFile }) {
+    if (!pdfFile?.buffer) {
+        throw new AppError('PDF file is required.', 400);
+    }
+
+    const pdfStoragePath = buildStoragePath('charity-pdfs', pdfFile.originalname);
+    let coverStoragePath;
+
+    const pdfUpload = await supabaseAdmin.storage
+        .from('pdfs')
+        .upload(pdfStoragePath, pdfFile.buffer, {
+            contentType: pdfFile.mimetype,
+            upsert: false,
+        });
+
+    if (pdfUpload.error) {
+        throw new AppError(`Failed to upload PDF: ${pdfUpload.error.message}`, 500);
+    }
+
+    let coverPublicUrl = null;
+
+    if (coverFile?.buffer) {
+        coverStoragePath = buildStoragePath('covers', coverFile.originalname);
+        const coverUpload = await supabaseAdmin.storage
+            .from('book-covers')
+            .upload(coverStoragePath, coverFile.buffer, {
+                contentType: coverFile.mimetype,
+                upsert: false,
+            });
+
+        if (coverUpload.error) {
+            await deleteObjectIfExists('pdfs', pdfStoragePath);
+            throw new AppError(`Failed to upload cover image: ${coverUpload.error.message}`, 500);
+        }
+
+        const { data: publicUrlData } = supabaseAdmin.storage
+            .from('book-covers')
+            .getPublicUrl(coverStoragePath);
+        coverPublicUrl = publicUrlData.publicUrl;
+    }
+
+    try {
+        const embeddingInput = [title, author, description].filter(Boolean).join(' ').trim();
+        const embedding = embeddingInput ? await generateEmbedding(embeddingInput) : [];
+        const embeddingValue = Array.isArray(embedding) && embedding.length > 0 ? toVectorLiteral(embedding) : null;
+
+        const { data, error } = await supabaseAdmin
+            .from('books')
+            .insert({
+                title,
+                author,
+                pdf_url: pdfStoragePath,
+                cover_url: coverPublicUrl,
+                embedding: embeddingValue,
+            })
+            .select('*')
+            .single();
+
+        if (error) throw new AppError(`Failed to insert book: ${error.message}`, 500);
+
+        return data;
+    } catch (err) {
+        await Promise.all([
+            deleteObjectIfExists('pdfs', pdfStoragePath),
+            deleteObjectIfExists('book-covers', coverStoragePath),
+        ]);
+        throw err;
+    }
 }
 
 /**
@@ -151,7 +253,7 @@ module.exports = {
     createBook,
     updateBook,
     deleteBook,
-    uploadCharityBook,
+    uploadCharityBookToSupabase,
     updateBookStatus,
     uploadCoverBook,
 };

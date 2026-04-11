@@ -55,17 +55,26 @@ async function remove(req, res, next) {
 
 async function uploadCharity(req, res, next) {
     try {
-        if (!req.file) {
+        const pdfFile = req.files?.pdf?.[0];
+        const coverFile = req.files?.cover?.[0];
+
+        if (!pdfFile) {
             return res.status(400).json({ success: false, message: 'PDF file is required.' });
         }
 
-        const { isbn, title, author, genre, description } = req.body;
-        if (!isbn || !title || !author) {
-            return res.status(400).json({ success: false, message: 'ISBN, title, and author are required.' });
+        const { title, author, description } = req.body;
+        if (!title || !author) {
+            return res.status(400).json({ success: false, message: 'Title and author are required.' });
         }
 
-        const pdfPath = `/uploads/${req.file.filename}`;
-        const book = await bookService.uploadCharityBook({ isbn, title, author, genre, description, pdfPath });
+        const book = await bookService.uploadCharityBookToSupabase({
+            title,
+            author,
+            description,
+            pdfFile,
+            coverFile,
+        });
+
         res.status(201).json({ success: true, data: book });
     } catch (err) {
         next(err);
@@ -77,8 +86,8 @@ async function uploadCover(req, res, next) {
         if (!req.file) {
             return res.status(400).json({ success: false, message: 'Cover image is required.' });
         }
-        const coverPath = `/uploads/${req.file.filename}`;
-        const book = await bookService.uploadCoverBook(req.params.id, coverPath);
+
+        const book = await bookService.uploadCoverBook(req.params.id, req.file);
         res.json({ success: true, data: book, message: 'Cover uploaded successfully!' });
     } catch (err) {
         next(err);
