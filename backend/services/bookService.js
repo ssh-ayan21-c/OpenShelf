@@ -10,6 +10,7 @@ function normalizeBook(book) {
     return {
         ...book,
         coverUrl: book.coverUrl ?? book.cover_url ?? null,
+        thumbnailUrl: book.thumbnailUrl ?? book.thumbnail_url ?? null,
         pdfUrl: book.pdfUrl ?? book.pdf_url ?? null,
         embedding: book.embedding ?? null,
     };
@@ -19,8 +20,9 @@ function pickBookFields(data = {}) {
     return {
         title: data.title,
         author: data.author,
-        cover_url: data.coverUrl ?? data.cover_url ?? null,
-        pdf_url: data.pdfUrl ?? data.pdf_url ?? null,
+        coverUrl: data.coverUrl ?? data.cover_url ?? null,
+        thumbnailUrl: data.thumbnailUrl ?? data.thumbnail_url ?? null,
+        pdfUrl: data.pdfUrl ?? data.pdf_url ?? null,
         embedding: data.embedding ?? null,
     };
 }
@@ -164,7 +166,10 @@ async function uploadCoverBook(id, coverFile) {
 
     const { data, error } = await supabaseAdmin
         .from('books')
-        .update({ cover_url: publicUrlData.publicUrl })
+        .update({
+            coverUrl: publicUrlData.publicUrl,
+            thumbnailUrl: publicUrlData.publicUrl,
+        })
         .eq('id', id)
         .select('*')
         .maybeSingle();
@@ -251,8 +256,9 @@ async function uploadCharityBookToSupabase({ title, author, description, pdfFile
             .insert({
                 title,
                 author,
-                pdf_url: pdfStoragePath,
-                cover_url: coverPublicUrl,
+                pdfUrl: pdfStoragePath,
+                coverUrl: coverPublicUrl,
+                thumbnailUrl: coverPublicUrl,
                 embedding: embeddingValue,
             })
             .select('*')

@@ -182,9 +182,9 @@ export default function Books() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, book.id)}
             >
-              {(book.coverUrl || book.cover_url) ? (
+              {(book.thumbnailUrl || book.coverUrl || book.cover_url) ? (
                 <>
-                  <img src={book.coverUrl || book.cover_url} alt={book.title} className="w-full h-full object-cover" />
+                  <img src={book.thumbnailUrl || book.coverUrl || book.cover_url} alt={book.title} className="w-full h-full object-cover" />
                   {dragOverId === book.id && (
                     <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center fade-in">
                       <UploadCloud className="w-8 h-8 text-emerald-400 mb-2" />

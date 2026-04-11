@@ -131,6 +131,7 @@ model Book {
   shelfLocation String?
   status        BookStatus @default(AVAILABLE)
   coverUrl      String?
+  thumbnailUrl  String?
   pdfUrl        String?
   price         Float?
   rentPrice     Float?
