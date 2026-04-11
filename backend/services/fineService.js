@@ -154,4 +154,54 @@ async function markFinePaid(fineId, adminId) {
     return updated;
 }
 
-module.exports = { getUserFines, calculateOverdueFines, payFine, getAllFines, markFinePaid };
+/**
+ * Rapid fine generation: For demonstration/testing.
+ * Deducts 1 INR every 10 seconds after a book is borrowed.
+ */
+async function processRapidFines() {
+    const now = new Date();
+
+    const activeCirculations = await prisma.circulation.findMany({
+        where: {
+            type: 'BORROW',
+            returnDate: null,
+        },
+        include: { fines: true, book: true },
+    });
+
+    const results = [];
+
+    for (const circ of activeCirculations) {
+        const elapsedSeconds = Math.floor((now - circ.borrowDate) / 1000);
+        const totalGeneratedPenalty = Math.floor(elapsedSeconds / 10) * 1;
+        const totalPaidAmount = circ.fines.filter(f => f.isPaid).reduce((sum, f) => sum + f.amount, 0);
+        const expectedCurrentFine = totalGeneratedPenalty - totalPaidAmount;
+
+        if (expectedCurrentFine > 0) {
+            const existingFine = circ.fines.find(f => !f.isPaid);
+
+            if (existingFine) {
+                if (existingFine.amount !== expectedCurrentFine) {
+                    await prisma.fine.update({
+                        where: { id: existingFine.id },
+                        data: { amount: expectedCurrentFine },
+                    });
+                    results.push({ circulationId: circ.id, amount: expectedCurrentFine, action: 'updated' });
+                }
+            } else {
+                await prisma.fine.create({
+                    data: {
+                        circulationId: circ.id,
+                        amount: expectedCurrentFine,
+                        isPaid: false,
+                    },
+                });
+                results.push({ circulationId: circ.id, amount: expectedCurrentFine, action: 'created' });
+            }
+        }
+    }
+    
+    return { processed: results.length, details: results };
+}
+
+module.exports = { getUserFines, calculateOverdueFines, payFine, getAllFines, markFinePaid, processRapidFines };

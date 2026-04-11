@@ -6,6 +6,7 @@ const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
+const fineService = require('./services/fineService');
 
 const { errorHandler } = require('./middlewares/errorHandler');
 
@@ -74,6 +75,20 @@ app.use('/api/reviews', reviewRoutes);
 
 // --------------- Error Handler (must be last) ---------------
 app.use(errorHandler);
+
+// --------------- Background Tasks ---------------
+let isProcessingFines = false;
+setInterval(async () => {
+    if (isProcessingFines) return;
+    isProcessingFines = true;
+    try {
+        await fineService.processRapidFines();
+    } catch (err) {
+        logger.error(`Error processing rapid fines: ${err.message}`);
+    } finally {
+        isProcessingFines = false;
+    }
+}, 10000);
 
 // --------------- Start Server ---------------
 app.listen(PORT, '0.0.0.0', () => {
