@@ -17,7 +17,8 @@ export default function Profile() {
     avatarUrl: user?.avatarUrl || ''
   });
 
-  const getRankData = (count) => {
+  const getRankData = (count, role) => {
+    if (role === 'ADMIN') return null;
     const c = count || 0;
     if (c <= 2) return { title: 'Vidyarthi (Student)', colors: 'from-slate-400 to-gray-500', badge: 'bg-slate-500/20 text-slate-300 border-slate-500/30' };
     if (c <= 5) return { title: 'Jigyasu (Curious)', colors: 'from-cyan-400 to-blue-500', badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' };
@@ -26,7 +27,7 @@ export default function Profile() {
     return { title: 'Rishi (Sage)', colors: 'from-amber-400 to-orange-500', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
   };
 
-  const rank = getRankData(user?.borrowedCount);
+  const rank = getRankData(user?.borrowedCount, user?.role);
 
   const handleSave = async () => {
     try {
@@ -54,17 +55,19 @@ export default function Profile() {
     <div className="max-w-2xl mx-auto space-y-6">
       
       {/* Rank Presentation Banner */}
-      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${rank.colors} p-8 flex items-center justify-between shadow-2xl`}>
-        <div className="absolute inset-0 bg-black/20 mix-blend-overlay"></div>
-        <div className="relative z-10 text-white space-y-1">
-          <p className="text-sm font-medium uppercase tracking-wider opacity-90">Current Level</p>
-          <h1 className="text-4xl font-extrabold drop-shadow-md">{rank.title}</h1>
-          <p className="text-sm opacity-95 pt-2">Based on {user.borrowedCount || 0} books actively borrowed</p>
+      {rank && (
+        <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${rank.colors} p-8 flex items-center justify-between shadow-2xl`}>
+          <div className="absolute inset-0 bg-black/20 mix-blend-overlay"></div>
+          <div className="relative z-10 text-white space-y-1">
+            <p className="text-sm font-medium uppercase tracking-wider opacity-90">Current Level</p>
+            <h1 className="text-4xl font-extrabold drop-shadow-md">{rank.title}</h1>
+            <p className="text-sm opacity-95 pt-2">Based on {user.borrowedCount || 0} books actively borrowed</p>
+          </div>
+          <div className="relative z-10 hidden sm:block">
+            <Crown className="w-20 h-20 text-white/20" />
+          </div>
         </div>
-        <div className="relative z-10 hidden sm:block">
-          <Crown className="w-20 h-20 text-white/20" />
-        </div>
-      </div>
+      )}
 
       <div className="glass-card p-6 md:p-8 space-y-8">
         {/* User Identity Section */}
@@ -84,9 +87,11 @@ export default function Profile() {
               {user.name}
             </h2>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-2">
-              <span className={`border ${rank.badge} px-2.5 py-0.5 rounded-full text-xs font-semibold flex items-center`}>
-                <Crown className="w-3 h-3 mr-1" /> {rank.title.split(' ')[0]}
-              </span>
+              {rank && (
+                <span className={`border ${rank.badge} px-2.5 py-0.5 rounded-full text-xs font-semibold flex items-center`}>
+                  <Crown className="w-3 h-3 mr-1" /> {rank.title.split(' ')[0]}
+                </span>
+              )}
               <span className={`badge ${user.role === 'ADMIN' ? 'badge-info' : 'badge-neutral'}`}>
                 <Shield className="w-3 h-3 mr-1 inline" />{user.role}
               </span>
