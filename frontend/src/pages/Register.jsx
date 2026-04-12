@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, Navigate } from 'react-router-dom';
-import { registerUser, clearError } from '../store/slices/authSlice';
+import { registerUser, clearError, signInWithGoogle } from '../store/slices/authSlice';
 import { BookOpen, Mail, Lock, User, ArrowRight } from 'lucide-react';
 
 export default function Register() {
   const dispatch = useDispatch();
-  const { isAuthenticated, loading, error } = useSelector((state) => state.auth);
+  const { isAuthenticated, loading, error, bootstrapped } = useSelector((state) => state.auth);
   const [form, setForm] = useState({ name: '', email: '', password: '' });
+
+  if (!bootstrapped) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-gray-400">
+        Loading session...
+      </div>
+    );
+  }
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
@@ -15,6 +23,11 @@ export default function Register() {
     e.preventDefault();
     dispatch(clearError());
     dispatch(registerUser(form));
+  };
+
+  const handleGoogleSignup = () => {
+    dispatch(clearError());
+    dispatch(signInWithGoogle());
   };
 
   return (
@@ -56,6 +69,14 @@ export default function Register() {
           </div>
           <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
             {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Create Account <ArrowRight className="w-4 h-4" /></>}
+          </button>
+          <button
+            type="button"
+            onClick={handleGoogleSignup}
+            disabled={loading}
+            className="w-full rounded-xl border border-gray-700/70 bg-gray-800/50 px-4 py-2.5 text-gray-200 hover:bg-gray-800 transition-colors disabled:opacity-60"
+          >
+            Continue with Google
           </button>
           <p className="text-center text-sm text-gray-500">
             Already have an account? <Link to="/login" className="text-emerald-400 hover:text-emerald-300 font-medium">Sign In</Link>

@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { Suspense, lazy } from 'react';
+import { useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
+import { initializeAuth } from './store/slices/authSlice';
 
 const Layout = lazy(() => import('./components/Layout'));
 const Login = lazy(() => import('./pages/Login'));
@@ -28,13 +30,26 @@ const Profile = lazy(() => import('./pages/Profile'));
 const RagChatbot = lazy(() => import('./pages/RagChatbot'));
 
 function ProtectedRoute({ children, adminOnly = false }) {
-  const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const { isAuthenticated, user, bootstrapped } = useSelector((state) => state.auth);
+  if (!bootstrapped) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-400">
+        Loading session...
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (adminOnly && user?.role !== 'ADMIN') return <Navigate to="/dashboard" replace />;
   return children;
 }
 
 export default function App() {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(initializeAuth());
+  }, [dispatch]);
+
   return (
     <ErrorBoundary>
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-gray-500">Loading modules...</div>}>

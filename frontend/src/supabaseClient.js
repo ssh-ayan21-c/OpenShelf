@@ -4,12 +4,34 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.');
+  console.warn('Supabase env vars are missing. Auth features will be disabled until VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const createSafeStub = () => ({
   auth: {
-    persistSession: true,
-    autoRefreshToken: true,
+    async getSession() {
+      return { data: { session: null }, error: null };
+    },
+    async signInWithPassword() {
+      return { data: null, error: new Error('Supabase auth is not configured.') };
+    },
+    async signUp() {
+      return { data: null, error: new Error('Supabase auth is not configured.') };
+    },
+    async signInWithOAuth() {
+      return { data: null, error: new Error('Supabase auth is not configured.') };
+    },
+    async signOut() {
+      return { error: null };
+    },
   },
 });
+
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+  : createSafeStub();

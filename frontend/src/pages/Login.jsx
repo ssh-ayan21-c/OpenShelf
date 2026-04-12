@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, Navigate } from 'react-router-dom';
-import { loginUser, clearError } from '../store/slices/authSlice';
+import { loginUser, clearError, signInWithGoogle } from '../store/slices/authSlice';
 import { BookOpen, Mail, Lock, ArrowRight } from 'lucide-react';
 
 export default function Login() {
   const dispatch = useDispatch();
-  const { isAuthenticated, loading, error } = useSelector((state) => state.auth);
+  const { isAuthenticated, loading, error, bootstrapped } = useSelector((state) => state.auth);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  if (!bootstrapped) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-gray-400">
+        Loading session...
+      </div>
+    );
+  }
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
@@ -16,6 +24,11 @@ export default function Login() {
     e.preventDefault();
     dispatch(clearError());
     dispatch(loginUser({ email, password }));
+  };
+
+  const handleGoogleLogin = () => {
+    dispatch(clearError());
+    dispatch(signInWithGoogle());
   };
 
   return (
@@ -82,6 +95,15 @@ export default function Login() {
             ) : (
               <>Sign In <ArrowRight className="w-4 h-4" /></>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full rounded-xl border border-gray-700/70 bg-gray-800/50 px-4 py-2.5 text-gray-200 hover:bg-gray-800 transition-colors disabled:opacity-60"
+          >
+            Continue with Google
           </button>
 
           <p className="text-center text-sm text-gray-500">

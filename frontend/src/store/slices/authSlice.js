@@ -70,7 +70,10 @@ export const initializeAuth = createAsyncThunk('auth/initialize', async (_, { re
   try {
     const { data } = await supabase.auth.getSession();
     const session = data.session;
-    if (!session) return { user: null, token: null, isAuthenticated: false };
+    if (!session) {
+      localStorage.removeItem('user');
+      return { user: null, token: null, isAuthenticated: false };
+    }
 
     await api.post('/users/bootstrap-profile', {
       name: session.user?.user_metadata?.name,
@@ -82,6 +85,21 @@ export const initializeAuth = createAsyncThunk('auth/initialize', async (_, { re
     return { user, token: session.access_token, isAuthenticated: true };
   } catch (err) {
     return rejectWithValue(err.response?.data?.message || err.message || 'Failed to initialize auth');
+  }
+});
+
+export const signInWithGoogle = createAsyncThunk('auth/signInWithGoogle', async (_, { rejectWithValue }) => {
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+      },
+    });
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    return rejectWithValue(err.message || 'Google sign-in failed');
   }
 });
 
@@ -99,13 +117,15 @@ const authSlice = createSlice({
     token: null,
     loading: false,
     error: null,
-    isAuthenticated: !!storedUser,
+    isAuthenticated: false,
+    bootstrapped: false,
   },
   reducers: {
     logout: (state) => {
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
+      state.bootstrapped = true;
       state.error = null;
       localStorage.removeItem('user');
     },
@@ -144,18 +164,32 @@ const authSlice = createSlice({
         state.user = action.payload.user;
         state.token = action.payload.token;
         state.isAuthenticated = action.payload.isAuthenticated;
+        state.bootstrapped = true;
       })
       .addCase(initializeAuth.rejected, (state, action) => {
         state.loading = false;
         state.user = null;
         state.token = null;
         state.isAuthenticated = false;
+        state.bootstrapped = true;
+        state.error = action.payload;
+      })
+      .addCase(signInWithGoogle.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(signInWithGoogle.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(signInWithGoogle.rejected, (state, action) => {
+        state.loading = false;
         state.error = action.payload;
       })
       .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;
         state.token = null;
         state.isAuthenticated = false;
+        state.bootstrapped = true;
         state.error = null;
       });
   },

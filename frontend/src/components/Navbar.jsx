@@ -1,6 +1,6 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { logout } from '../store/slices/authSlice';
+import { logoutUser } from '../store/slices/authSlice';
 import { LogOut, User, Search } from 'lucide-react';
 
 export default function Navbar() {
@@ -9,7 +9,7 @@ export default function Navbar() {
   const { user } = useSelector((state) => state.auth);
 
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logoutUser());
     navigate('/login');
   };
 
