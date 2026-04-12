@@ -1,10 +1,18 @@
 import axios from 'axios';
 import { supabase } from '../supabaseClient';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const rawApiBase = import.meta.env.VITE_API_BASE_URL || '';
+const isPlaceholderApiBase = rawApiBase.includes('your-railway-backend.up.railway.app');
+const API_BASE = rawApiBase && !isPlaceholderApiBase
+  ? rawApiBase.replace(/\/+$/, '')
+  : (import.meta.env.DEV ? 'http://localhost:3000' : '');
+
+if (!API_BASE) {
+  console.warn('VITE_API_BASE_URL is not configured. API requests to the backend will fail until it is set.');
+}
 
 const api = axios.create({
-  baseURL: `${API_BASE}/api`,
+  baseURL: API_BASE ? `${API_BASE}/api` : '/api',
   headers: { 'Content-Type': 'application/json' },
 });
 

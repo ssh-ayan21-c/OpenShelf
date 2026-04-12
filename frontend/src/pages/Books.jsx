@@ -1,5 +1,6 @@
 // Import React hooks
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 // Import Redux hooks
 import { useSelector, useDispatch } from 'react-redux';
@@ -248,6 +249,12 @@ export default function Books() {
 
               {/* Action buttons */}
               <div className="flex gap-2">
+                <Link
+                  to={`/books/${book.id}`}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-700/40 text-gray-200 text-sm font-medium hover:bg-gray-700/60 transition-all"
+                >
+                  Details
+                </Link>
 
                 {/* Borrow button */}
                 <button

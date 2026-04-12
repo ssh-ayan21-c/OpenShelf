@@ -12,6 +12,10 @@ function normalizeBook(book) {
         coverUrl: book.coverUrl ?? book.cover_url ?? null,
         thumbnailUrl: book.thumbnailUrl ?? book.thumbnail_url ?? null,
         pdfUrl: book.pdfUrl ?? book.pdf_url ?? null,
+        format: book.format ?? (book.isDigital ? 'digital' : 'physical'),
+        shelfLocation: book.shelfLocation ?? book.shelf_location ?? null,
+        availableCopies: book.availableCopies ?? book.available_copies ?? book.physicalCount ?? 0,
+        isPremium: book.isPremium ?? book.is_premium ?? false,
         embedding: book.embedding ?? null,
     };
 }
@@ -23,8 +27,66 @@ function pickBookFields(data = {}) {
         coverUrl: data.coverUrl ?? data.cover_url ?? null,
         thumbnailUrl: data.thumbnailUrl ?? data.thumbnail_url ?? null,
         pdfUrl: data.pdfUrl ?? data.pdf_url ?? null,
+        format: data.format,
+        shelfLocation: data.shelfLocation ?? data.shelf_location,
+        availableCopies: data.availableCopies ?? data.available_copies,
+        isPremium: data.isPremium ?? data.is_premium,
         embedding: data.embedding ?? null,
     };
+}
+
+function normalizePdfStoragePath(rawPath) {
+    if (!rawPath || typeof rawPath !== 'string') return null;
+    const trimmed = rawPath.trim();
+    if (!trimmed) return null;
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        const marker = '/pdfs/';
+        const markerIndex = trimmed.indexOf(marker);
+        if (markerIndex === -1) return null;
+        return decodeURIComponent(trimmed.slice(markerIndex + marker.length));
+    }
+
+    return trimmed.replace(/^\/+/, '').replace(/^pdfs\//, '');
+}
+
+function resolveSubscriptionTier(userRow) {
+    if (!userRow) return 'free';
+    const tier = userRow.subscription_tier ?? userRow.subscriptionTier;
+    if (tier === 'premium' || tier === 'free') return tier;
+    return userRow.isPremium ? 'premium' : 'free';
+}
+
+async function hasActiveRental(userId, bookId) {
+    const nowIso = new Date().toISOString();
+
+    // Preferred snake_case schema
+    const snake = await supabaseAdmin
+        .from('rentals')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('book_id', bookId)
+        .gt('expires_at', nowIso)
+        .limit(1)
+        .maybeSingle();
+
+    if (!snake.error) return !!snake.data;
+
+    // Backward-compatible camelCase fallback
+    const camel = await supabaseAdmin
+        .from('rentals')
+        .select('id')
+        .eq('userId', userId)
+        .eq('bookId', bookId)
+        .gt('expiresAt', nowIso)
+        .limit(1)
+        .maybeSingle();
+
+    if (camel.error) {
+        throw new AppError(`Failed to verify active rental: ${camel.error.message}`, 500);
+    }
+
+    return !!camel.data;
 }
 
 /**
@@ -81,6 +143,7 @@ async function getBookById(id) {
  */
 async function createBook(data) {
     const payload = pickBookFields(data);
+    Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
 
     if (!payload.title || !payload.author) {
         throw new AppError('Title and author are required.', 400);
@@ -259,6 +322,9 @@ async function uploadCharityBookToSupabase({ title, author, description, pdfFile
                 pdfUrl: pdfStoragePath,
                 coverUrl: coverPublicUrl,
                 thumbnailUrl: coverPublicUrl,
+                format: 'digital',
+                availableCopies: 0,
+                isPremium: false,
                 embedding: embeddingValue,
             })
             .select('*')
@@ -290,6 +356,126 @@ async function updateBookStatus(bookId) {
     return normalizeBook(data);
 }
 
+/**
+ * Authorize and return a short-lived signed URL for reading a digital/hybrid PDF.
+ */
+async function getDigitalReadUrl(bookId, userId) {
+    const book = await getBookById(bookId);
+    const bookFormat = book.format;
+
+    if (!['digital', 'hybrid'].includes(bookFormat)) {
+        throw new AppError('This book is not available for digital reading.', 400);
+    }
+
+    const pdfPath = normalizePdfStoragePath(book.pdfUrl);
+    if (!pdfPath) {
+        throw new AppError('No readable PDF is available for this book.', 400);
+    }
+
+    const isPremiumBook = !!book.isPremium;
+
+    if (isPremiumBook) {
+        const snakeUser = await supabaseAdmin
+            .from('users')
+            .select('id, subscription_tier, isPremium')
+            .eq('id', userId)
+            .maybeSingle();
+
+        let userRow = snakeUser.data;
+        let userError = snakeUser.error;
+
+        if (userError) {
+            const camelUser = await supabaseAdmin
+                .from('users')
+                .select('id, subscriptionTier, isPremium')
+                .eq('id', userId)
+                .maybeSingle();
+
+            userRow = camelUser.data;
+            userError = camelUser.error;
+        }
+
+        if (userError) {
+            throw new AppError(`Failed to verify user subscription: ${userError.message}`, 500);
+        }
+        if (!userRow) {
+            throw new AppError('User profile not found.', 404);
+        }
+
+        const tier = resolveSubscriptionTier(userRow);
+        if (tier !== 'premium') {
+            const activeRental = await hasActiveRental(userId, bookId);
+            if (!activeRental) {
+                throw new AppError('Access denied. Please rent this digital copy or upgrade to Premium.', 403);
+            }
+        }
+    }
+
+    const { data: signedData, error: signedError } = await supabaseAdmin.storage
+        .from('pdfs')
+        .createSignedUrl(pdfPath, 15 * 60);
+
+    if (signedError || !signedData?.signedUrl) {
+        throw new AppError(`Failed to generate read URL: ${signedError?.message || 'Unknown storage error.'}`, 500);
+    }
+
+    return {
+        signedUrl: signedData.signedUrl,
+        expiresIn: 15 * 60,
+    };
+}
+
+/**
+ * Create a temporary rental access row for a digital/hybrid book.
+ */
+async function rentDigitalAccess(bookId, userId) {
+    const book = await getBookById(bookId);
+    const bookFormat = book.format;
+
+    if (!['digital', 'hybrid'].includes(bookFormat)) {
+        throw new AppError('This book is not available for digital rental.', 400);
+    }
+
+    const now = Date.now();
+    const expiresAt = new Date(now + (7 * 24 * 60 * 60 * 1000)).toISOString();
+
+    const snakeInsert = await supabaseAdmin
+        .from('rentals')
+        .insert({
+            user_id: userId,
+            book_id: bookId,
+            expires_at: expiresAt,
+        })
+        .select('*')
+        .single();
+
+    if (!snakeInsert.error) {
+        return {
+            rental: snakeInsert.data,
+            expiresAt,
+        };
+    }
+
+    const camelInsert = await supabaseAdmin
+        .from('rentals')
+        .insert({
+            userId,
+            bookId,
+            expiresAt,
+        })
+        .select('*')
+        .single();
+
+    if (camelInsert.error) {
+        throw new AppError(`Failed to create rental access: ${camelInsert.error.message}`, 500);
+    }
+
+    return {
+        rental: camelInsert.data,
+        expiresAt,
+    };
+}
+
 module.exports = {
     listBooks,
     getBookById,
@@ -299,4 +485,6 @@ module.exports = {
     uploadCharityBookToSupabase,
     updateBookStatus,
     uploadCoverBook,
+    getDigitalReadUrl,
+    rentDigitalAccess,
 };

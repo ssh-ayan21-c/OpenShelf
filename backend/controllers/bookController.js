@@ -94,4 +94,22 @@ async function uploadCover(req, res, next) {
     }
 }
 
-module.exports = { list, getById, create, update, remove, uploadCharity, uploadCover };
+async function read(req, res, next) {
+    try {
+        const data = await bookService.getDigitalReadUrl(req.params.id, req.user.id);
+        res.json({ success: true, data });
+    } catch (err) {
+        next(err);
+    }
+}
+
+async function rent(req, res, next) {
+    try {
+        const data = await bookService.rentDigitalAccess(req.params.id, req.user.id);
+        res.status(201).json({ success: true, data });
+    } catch (err) {
+        next(err);
+    }
+}
+
+module.exports = { list, getById, create, update, remove, uploadCharity, uploadCover, read, rent };

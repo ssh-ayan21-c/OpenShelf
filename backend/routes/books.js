@@ -7,6 +7,8 @@ const bookController = require('../controllers/bookController');
 // Public
 router.get('/', bookController.list);
 router.get('/:id', bookController.getById);
+router.get('/:id/read', authenticate, bookController.read);
+router.post('/:id/rent', authenticate, bookController.rent);
 
 // Admin only
 router.post('/', authenticate, requireAdmin, bookController.create);
