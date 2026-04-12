@@ -1,5 +1,7 @@
 // Import React hooks
 import { useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { fetchMe } from '../store/slices/authSlice';
 
 // Import toast for notifications
 import { toast } from 'react-toastify';
@@ -8,9 +10,10 @@ import { toast } from 'react-toastify';
 import api from '../api/axios';
 
 // Import icons
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Undo2 } from 'lucide-react';
 
 export default function BorrowedBooks() {
+  const dispatch = useDispatch();
 
   // State to store borrowed book records
   const [records, setRecords] = useState([]);
@@ -55,6 +58,18 @@ export default function BorrowedBooks() {
     } catch (err) {
       // Error message
       toast.error(err.response?.data?.message || 'Renewal failed');
+    }
+  };
+
+  // Function to return a book
+  const handleReturn = async (id) => {
+    try {
+      await api.post('/circulation/return', { circulationId: id });
+      toast.success('Book returned!');
+      fetchData();
+      dispatch(fetchMe()); // Instantly update user profile rank
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Return failed');
     }
   };
 
@@ -128,8 +143,15 @@ export default function BorrowedBooks() {
                   )}
                 </td>
 
-                {/* Action buttons - only Renew for users, Return is admin-only */}
-                <td className="p-4 text-right">
+                {/* Action buttons */}
+                <td className="p-4 text-right space-x-2">
+
+                  <button
+                    onClick={() => handleReturn(c.id)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" /> Return
+                  </button>
 
                   {/* Renew button */}
                   <button

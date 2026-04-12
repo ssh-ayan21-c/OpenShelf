@@ -79,7 +79,7 @@ async function getProfile(userId) {
             _count: {
                 select: {
                     circulations: {
-                        where: { type: 'BORROW' }
+                        where: { type: 'BORROW', returnDate: null }
                     }
                 }
             }

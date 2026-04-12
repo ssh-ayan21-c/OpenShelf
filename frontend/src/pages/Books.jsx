@@ -6,6 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 
 // Import async action to fetch books
 import { fetchBooks } from '../store/slices/bookSlice';
+import { fetchMe } from '../store/slices/authSlice';
 
 // Import toast notifications
 import { toast } from 'react-toastify';
@@ -64,8 +65,9 @@ export default function Books() {
       // Show success message
       toast.success('Book borrowed successfully!');
 
-      // Refresh book list
+      // Refresh book list and user profile
       dispatch(fetchBooks());
+      dispatch(fetchMe());
     } catch (err) {
       // Show error message
       toast.error(err.response?.data?.message || 'Failed to borrow');
