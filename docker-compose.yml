@@ -10,6 +10,8 @@ services:
       - "3000:3000"
     env_file:
       - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://openshelf:openshelf@db:5432/openshelf?schema=public
     depends_on:
       db:
         condition: service_healthy

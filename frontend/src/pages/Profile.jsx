@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../api/axios';
@@ -9,6 +9,15 @@ export default function Profile() {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const [editing, setEditing] = useState(false);
+
+  // Poll the server every 5 seconds to get live active borrow count → rank updates dynamically
+  useEffect(() => {
+    dispatch(fetchMe()); // fetch immediately on mount
+    const interval = setInterval(() => {
+      dispatch(fetchMe());
+    }, 5000);
+    return () => clearInterval(interval); // cleanup on unmount
+  }, [dispatch]);
   
   const [form, setForm] = useState({ 
     name: user?.name || '', 
