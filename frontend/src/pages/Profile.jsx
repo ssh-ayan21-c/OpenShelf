@@ -10,9 +10,13 @@ export default function Profile() {
   const { user } = useSelector((state) => state.auth);
   const [editing, setEditing] = useState(false);
 
-  // Always fetch fresh user data on mount so borrowedCount (and rank) reflects DB reality
+  // Poll the server every 5 seconds to get live active borrow count → rank updates dynamically
   useEffect(() => {
-    dispatch(fetchMe());
+    dispatch(fetchMe()); // fetch immediately on mount
+    const interval = setInterval(() => {
+      dispatch(fetchMe());
+    }, 5000);
+    return () => clearInterval(interval); // cleanup on unmount
   }, [dispatch]);
   
   const [form, setForm] = useState({ 
