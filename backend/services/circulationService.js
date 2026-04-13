@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const { AppError } = require('../middlewares/errorHandler');
 const { updateBookStatus } = require('./bookService');
+const { createTransaction } = require('./transactionService');
 
 const prisma = new PrismaClient();
 const DEFAULT_BORROW_DAYS = parseInt(process.env.DEFAULT_BORROW_DAYS) || 14;
@@ -41,6 +42,19 @@ async function borrowBook(userId, bookId) {
     });
 
     await updateBookStatus(bookId);
+
+    try {
+        await createTransaction({
+            type: 'BORROW',
+            userId,
+            bookId,
+            description: `Borrowed "${book.title}"`,
+            metadata: { circulationId: circulation.id, dueDate: circulation.dueDate },
+        });
+    } catch (err) {
+        console.error('Failed to record BORROW transaction:', err);
+    }
+
     return circulation;
 }
 
@@ -83,6 +97,18 @@ async function returnBook(userId, circulationId) {
     });
 
     await updateBookStatus(circulation.bookId);
+
+    try {
+        await createTransaction({
+            type: 'RETURN',
+            userId: circulation.userId,
+            bookId: circulation.bookId,
+            description: `Returned "${circulation.book?.title || 'book'}"`,
+            metadata: { circulationId: circulation.id, fineId: fine?.id || null, fineAmount: fine?.amount || 0 },
+        });
+    } catch (err) {
+        console.error('Failed to record RETURN transaction:', err);
+    }
 
     // Check if there's a pending reservation to fulfill
     const nextReservation = await prisma.reservation.findFirst({
@@ -143,6 +169,19 @@ async function buyBook(userId, bookId) {
         include: { book: true },
     });
 
+    try {
+        await createTransaction({
+            type: 'BOOK_PURCHASE',
+            userId,
+            bookId,
+            amount: Number(book.price || 0),
+            description: `Purchased "${book.title}"`,
+            metadata: { circulationId: circulation.id },
+        });
+    } catch (err) {
+        console.error('Failed to record BOOK_PURCHASE transaction:', err);
+    }
+
     return circulation;
 }
 
@@ -191,11 +230,25 @@ async function renewBook(userId, circulationId) {
     const newDueDate = new Date(circulation.dueDate);
     newDueDate.setDate(newDueDate.getDate() + DEFAULT_BORROW_DAYS);
 
-    return prisma.circulation.update({
+    const renewed = await prisma.circulation.update({
         where: { id: circulationId },
         data: { dueDate: newDueDate, renewalCount: { increment: 1 }, renewedAt: now },
         include: { book: true },
     });
+
+    try {
+        await createTransaction({
+            type: 'RENEWAL',
+            userId: circulation.userId,
+            bookId: circulation.bookId,
+            description: `Renewed "${circulation.book?.title || 'book'}"`,
+            metadata: { circulationId: circulation.id, newDueDate },
+        });
+    } catch (err) {
+        console.error('Failed to record RENEWAL transaction:', err);
+    }
+
+    return renewed;
 }
 
 /**
@@ -250,6 +303,19 @@ async function adminReturnBook(circulationId) {
     });
 
     await updateBookStatus(circulation.bookId);
+
+    try {
+        await createTransaction({
+            type: 'RETURN',
+            userId: circulation.userId,
+            bookId: circulation.bookId,
+            description: `Returned "${circulation.book?.title || 'book'}"`,
+            metadata: { circulationId: circulation.id, fineId: fine?.id || null, fineAmount: fine?.amount || 0 },
+        });
+    } catch (err) {
+        console.error('Failed to record admin RETURN transaction:', err);
+    }
+
     return { circulation: updated, fine };
 }
 

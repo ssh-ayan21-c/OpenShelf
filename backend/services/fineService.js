@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const { AppError } = require('../middlewares/errorHandler');
+const { createTransaction } = require('./transactionService');
 
 const prisma = new PrismaClient();
 
@@ -76,7 +77,7 @@ async function calculateOverdueFines() {
 async function payFine(fineId, userId) {
     const fine = await prisma.fine.findUnique({
         where: { id: fineId },
-        include: { circulation: true },
+        include: { circulation: { include: { book: true } } },
     });
 
     if (!fine) throw new AppError('Fine not found.', 404);
@@ -96,6 +97,20 @@ async function payFine(fineId, userId) {
             totalFinesPaid: { increment: fine.amount },
         },
     });
+
+    try {
+        await createTransaction({
+            type: 'FINE_PAYMENT',
+            userId,
+            bookId: fine.circulation.bookId || null,
+            amount: fine.amount,
+            paymentStatus: 'COMPLETED',
+            description: `Fine paid for "${fine.circulation.book?.title || 'book'}"`,
+            metadata: { fineId: fine.id, circulationId: fine.circulationId },
+        });
+    } catch (err) {
+        console.error('Failed to record FINE_PAYMENT transaction:', err);
+    }
 
     return updated;
 }
@@ -131,7 +146,7 @@ async function getAllFines() {
 async function markFinePaid(fineId, adminId) {
     const fine = await prisma.fine.findUnique({
         where: { id: fineId },
-        include: { circulation: true },
+        include: { circulation: { include: { book: true } } },
     });
 
     if (!fine) throw new AppError('Fine not found.', 404);
@@ -150,6 +165,22 @@ async function markFinePaid(fineId, adminId) {
             totalFinesPaid: { increment: fine.amount },
         },
     });
+
+    try {
+        await createTransaction({
+            type: 'FINE_PAYMENT',
+            userId: fine.circulation.userId,
+            bookId: fine.circulation.bookId || null,
+            amount: fine.amount,
+            paymentMethod: 'CASH',
+            paymentStatus: 'COMPLETED',
+            processedById: adminId,
+            description: `Fine marked paid for "${fine.circulation.book?.title || 'book'}"`,
+            metadata: { fineId: fine.id, circulationId: fine.circulationId, markedByAdmin: true },
+        });
+    } catch (err) {
+        console.error('Failed to record admin FINE_PAYMENT transaction:', err);
+    }
 
     return updated;
 }
