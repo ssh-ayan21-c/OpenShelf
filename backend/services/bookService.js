@@ -36,7 +36,7 @@ function pickBookFields(data = {}) {
 }
 
 async function insertBookWithSchemaFallback(basePayload) {
-    let payload = { ...basePayload };
+    let payload = { id: crypto.randomUUID(), ...basePayload };
     const triedMissingColumns = new Set();
 
     for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -172,7 +172,7 @@ async function getBookById(id) {
  * Create a new book (Admin only).
  */
 async function createBook(data) {
-    const payload = pickBookFields(data);
+    const payload = { id: crypto.randomUUID(), ...pickBookFields(data) };
     Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
 
     if (!payload.title || !payload.author) {
