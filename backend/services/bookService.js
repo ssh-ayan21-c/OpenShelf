@@ -28,11 +28,41 @@ function pickBookFields(data = {}) {
         thumbnailUrl: data.thumbnailUrl ?? data.thumbnail_url ?? null,
         pdfUrl: data.pdfUrl ?? data.pdf_url ?? null,
         format: data.format,
-        shelfLocation: data.shelfLocation ?? data.shelf_location,
-        availableCopies: data.availableCopies ?? data.available_copies,
-        isPremium: data.isPremium ?? data.is_premium,
+        shelf_location: data.shelfLocation ?? data.shelf_location,
+        available_copies: data.availableCopies ?? data.available_copies,
+        is_premium: data.isPremium ?? data.is_premium,
         embedding: data.embedding ?? null,
     };
+}
+
+async function insertBookWithSchemaFallback(basePayload) {
+    let payload = { ...basePayload };
+    const triedMissingColumns = new Set();
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+        const { data, error } = await supabaseAdmin
+            .from('books')
+            .insert(payload)
+            .select('*')
+            .single();
+
+        if (!error) return data;
+
+        const match = /Could not find the '([^']+)' column of 'books' in the schema cache/.exec(error.message || '');
+        if (!match) {
+            throw new AppError(`Failed to insert book: ${error.message}`, 500);
+        }
+
+        const missingColumn = match[1];
+        if (!Object.prototype.hasOwnProperty.call(payload, missingColumn) || triedMissingColumns.has(missingColumn)) {
+            throw new AppError(`Failed to insert book: ${error.message}`, 500);
+        }
+
+        triedMissingColumns.add(missingColumn);
+        delete payload[missingColumn];
+    }
+
+    throw new AppError('Failed to insert book: schema mismatch could not be resolved.', 500);
 }
 
 function normalizePdfStoragePath(rawPath) {
@@ -314,25 +344,19 @@ async function uploadCharityBookToSupabase({ title, author, description, pdfFile
         const embedding = embeddingInput ? await generateEmbedding(embeddingInput) : [];
         const embeddingValue = Array.isArray(embedding) && embedding.length > 0 ? toVectorLiteral(embedding) : null;
 
-        const { data, error } = await supabaseAdmin
-            .from('books')
-            .insert({
-                title,
-                author,
-                pdfUrl: pdfStoragePath,
-                coverUrl: coverPublicUrl,
-                thumbnailUrl: coverPublicUrl,
-                format: 'digital',
-                availableCopies: 0,
-                isPremium: false,
-                embedding: embeddingValue,
-            })
-            .select('*')
-            .single();
+        const inserted = await insertBookWithSchemaFallback({
+            title,
+            author,
+            pdfUrl: pdfStoragePath,
+            coverUrl: coverPublicUrl,
+            thumbnailUrl: coverPublicUrl,
+            format: 'digital',
+            available_copies: 0,
+            is_premium: false,
+            embedding: embeddingValue,
+        });
 
-        if (error) throw new AppError(`Failed to insert book: ${error.message}`, 500);
-
-        return normalizeBook(data);
+        return normalizeBook(inserted);
     } catch (err) {
         await Promise.all([
             deleteObjectIfExists('pdfs', pdfStoragePath),
