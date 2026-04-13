@@ -67,22 +67,27 @@ async function ensureUserProfileFromAuth(authUser, profile = {}) {
     const nameFromAuth = authUser.user_metadata?.name;
     const name = profile.name || nameFromAuth || email.split('@')[0];
     const premium = await isPremiumDomain(email);
+    const existing = await prisma.user.findUnique({
+        where: { id: authUser.id },
+        select: { role: true, isPremium: true },
+    });
+    const role = profile.role || existing?.role || 'USER';
 
     return prisma.user.upsert({
         where: { id: authUser.id },
         update: {
             email,
             name,
-            role: profile.role || 'USER',
+            role,
             phone: profile.phone,
             address: profile.address,
-            isPremium: premium,
+            isPremium: existing?.isPremium ?? premium,
         },
         create: {
             id: authUser.id,
             email,
             name,
-            role: profile.role || 'USER',
+            role,
             phone: profile.phone || null,
             address: profile.address || null,
             isPremium: premium,
