@@ -51,7 +51,7 @@ export default function RagChatbot() {
       // Error message if AI fails
       const msg =
         err.response?.data?.message ||
-        'AI assistant is not available. Make sure OPENAI_API_KEY is configured.';
+        'AI assistant is not available. Make sure OPENROUTER_API_KEY is configured.';
 
       // Show error response in chat
       setMessages(prev => [

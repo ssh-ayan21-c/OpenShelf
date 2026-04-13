@@ -2,6 +2,40 @@ const { PrismaClient } = require('@prisma/client');
 const { AppError } = require('../middlewares/errorHandler');
 
 const prisma = new PrismaClient();
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const OPENROUTER_CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL || 'openai/gpt-4o-mini';
+const OPENROUTER_EMBEDDING_MODEL = process.env.OPENROUTER_EMBEDDING_MODEL || 'openai/text-embedding-3-small';
+const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || 'http://localhost:5173';
+const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || 'OpenShelf';
+
+function hasOpenRouterKey() {
+    return !!process.env.OPENROUTER_API_KEY;
+}
+
+async function callOpenRouter(path, body) {
+    if (!hasOpenRouterKey()) {
+        throw new AppError('OPENROUTER_API_KEY is not configured.', 500);
+    }
+
+    const response = await fetch(`${OPENROUTER_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': OPENROUTER_SITE_URL,
+            'X-Title': OPENROUTER_APP_NAME,
+        },
+        body: JSON.stringify(body),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const message = payload?.error?.message || `OpenRouter request failed with status ${response.status}`;
+        throw new AppError(message, 502);
+    }
+
+    return payload;
+}
 
 /**
  * Store text chunks (and optionally embeddings) for a book.
@@ -51,51 +85,111 @@ async function storeEmbeddings(bookId, chunks) {
  * @param {number} topK - Number of results to return
  */
 async function askQuestion(bookId, question, queryVector, topK = 5) {
-    const book = await prisma.book.findUnique({ where: { id: bookId } });
-    if (!book) throw new AppError('Book not found.', 404);
+    let book = null;
+    if (bookId) {
+        book = await prisma.book.findUnique({ where: { id: bookId } });
+        if (!book) throw new AppError('Book not found.', 404);
+    }
+
+    const safeTopK = Math.max(1, Math.min(Number(topK) || 5, 12));
 
     // If no query vector is provided, fall back to text search
     if (!queryVector || queryVector.length === 0) {
+        const where = bookId
+            ? { bookId, content: { contains: question, mode: 'insensitive' } }
+            : { content: { contains: question, mode: 'insensitive' } };
+
         const textResults = await prisma.embedding.findMany({
-            where: {
-                bookId,
-                content: { contains: question, mode: 'insensitive' },
-            },
-            take: topK,
+            where,
+            include: { book: { select: { id: true, title: true, author: true } } },
+            take: safeTopK,
         });
 
         return {
-            book: { id: book.id, title: book.title },
+            book: book ? { id: book.id, title: book.title } : null,
             question,
             method: 'text_search',
-            results: textResults.map(e => ({ id: e.id, content: e.content })),
+            results: textResults.map(e => ({
+                id: e.id,
+                content: e.content,
+                book: e.book ? { id: e.book.id, title: e.book.title, author: e.book.author } : null,
+            })),
         };
     }
 
     // Vector similarity search via pgvector
     const vectorStr = `[${queryVector.join(',')}]`;
-    const results = await prisma.$queryRawUnsafe(
-        `SELECT id, content, vector <=> $1::vector AS distance
-     FROM embeddings
-     WHERE book_id = $2
-     AND vector IS NOT NULL
-     ORDER BY distance ASC
-     LIMIT $3`,
-        vectorStr,
-        bookId,
-        topK
-    );
+    const vectorResults = bookId
+        ? await prisma.$queryRawUnsafe(
+            `SELECT e.id, e.content, e.book_id, b.title AS book_title, b.author AS book_author, e.vector <=> $1::vector AS distance
+             FROM embeddings e
+             LEFT JOIN books b ON b.id = e.book_id
+             WHERE e.book_id = $2
+             AND e.vector IS NOT NULL
+             ORDER BY distance ASC
+             LIMIT $3`,
+            vectorStr,
+            bookId,
+            safeTopK
+        )
+        : await prisma.$queryRawUnsafe(
+            `SELECT e.id, e.content, e.book_id, b.title AS book_title, b.author AS book_author, e.vector <=> $1::vector AS distance
+             FROM embeddings e
+             LEFT JOIN books b ON b.id = e.book_id
+             WHERE e.vector IS NOT NULL
+             ORDER BY distance ASC
+             LIMIT $2`,
+            vectorStr,
+            safeTopK
+        );
 
     return {
-        book: { id: book.id, title: book.title },
+        book: book ? { id: book.id, title: book.title } : null,
         question,
         method: 'vector_similarity',
-        results: results.map(r => ({
+        results: vectorResults.map(r => ({
             id: r.id,
             content: r.content,
             distance: r.distance,
+            book: r.book_id ? { id: r.book_id, title: r.book_title, author: r.book_author } : null,
         })),
     };
+}
+
+async function generateAnswer(question, retrievalResult) {
+    const contextChunks = retrievalResult?.results || [];
+
+    if (contextChunks.length === 0) {
+        return 'I could not find relevant context in the indexed library content for that question yet.';
+    }
+
+    const contextText = contextChunks
+        .map((item, index) => {
+            const label = item.book?.title ? `${item.book.title}` : 'Unknown book';
+            return `[Chunk ${index + 1} | ${label}] ${item.content}`;
+        })
+        .join('\n\n');
+
+    if (!hasOpenRouterKey()) {
+        return `I found relevant context, but OPENROUTER_API_KEY is not configured.\n\nTop context:\n${contextText.slice(0, 1200)}`;
+    }
+
+    const completion = await callOpenRouter('/chat/completions', {
+        model: OPENROUTER_CHAT_MODEL,
+        temperature: 0.2,
+        messages: [
+            {
+                role: 'system',
+                content: 'You are OpenShelf RAG assistant. Answer only from provided context. If context is insufficient, clearly say so.',
+            },
+            {
+                role: 'user',
+                content: `Question:\n${question}\n\nContext:\n${contextText}\n\nAnswer in concise bullet points when useful.`,
+            },
+        ],
+    });
+
+    return completion?.choices?.[0]?.message?.content?.trim() || 'No answer generated.';
 }
 
 /**
@@ -103,16 +197,21 @@ async function askQuestion(bookId, question, queryVector, topK = 5) {
  * Replace with actual API call (OpenAI, Cohere, etc.)
  */
 async function generateEmbedding(text) {
-    // TODO: Integrate with your chosen AI provider
-    // Example with OpenAI:
-    //   const response = await openai.embeddings.create({
-    //     model: 'text-embedding-3-small',
-    //     input: text,
-    //   });
-    //   return response.data[0].embedding;
+    const input = (text || '').trim();
+    if (!input) return [];
 
-    console.warn('⚠️  generateEmbedding() is a placeholder. Integrate an AI provider for real embeddings.');
-    return []; // Return empty vector
+    if (!hasOpenRouterKey()) {
+        console.warn('⚠️  OPENROUTER_API_KEY is not configured. Returning empty embedding.');
+        return [];
+    }
+
+    const payload = await callOpenRouter('/embeddings', {
+        model: OPENROUTER_EMBEDDING_MODEL,
+        input,
+    });
+
+    const vector = payload?.data?.[0]?.embedding;
+    return Array.isArray(vector) ? vector : [];
 }
 
-module.exports = { storeEmbeddings, askQuestion, generateEmbedding };
+module.exports = { storeEmbeddings, askQuestion, generateEmbedding, generateAnswer };

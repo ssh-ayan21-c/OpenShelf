@@ -19,21 +19,23 @@ async function embed(req, res, next) {
 async function ask(req, res, next) {
     try {
         const { bookId, question, queryVector, topK } = req.body;
-        if (!bookId || !question) {
+        if (!question) {
             return res.status(400).json({
                 success: false,
-                message: 'bookId and question are required.',
+                message: 'question is required.',
             });
         }
 
-        // If no queryVector provided, try to generate one (placeholder)
+        // If no queryVector provided, generate one via configured embedding model.
         let vector = queryVector;
         if (!vector || vector.length === 0) {
             vector = await ragService.generateEmbedding(question);
         }
 
-        const result = await ragService.askQuestion(bookId, question, vector, topK || 5);
-        res.json({ success: true, data: result });
+        const retrieval = await ragService.askQuestion(bookId || null, question, vector, topK || 5);
+        const answer = await ragService.generateAnswer(question, retrieval);
+
+        res.json({ success: true, answer, data: { ...retrieval, answer } });
     } catch (err) {
         next(err);
     }
