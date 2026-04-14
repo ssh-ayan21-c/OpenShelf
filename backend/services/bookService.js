@@ -2,7 +2,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { AppError } = require('../middlewares/errorHandler');
 const { supabaseAdmin } = require('../config/supabaseClient');
-const { generateEmbedding } = require('./ragService');
+const { generateEmbedding, indexBookEmbeddings } = require('./ragService');
 
 function normalizeBook(book) {
     if (!book) return null;
@@ -440,6 +440,20 @@ async function uploadCharityBookToSupabase({ title, author, description, pdfFile
             is_premium: false,
             embedding: embeddingValue,
         });
+
+        try {
+            await indexBookEmbeddings({
+                bookId: inserted.id,
+                title,
+                author,
+                description,
+                pdfUrl: pdfStoragePath,
+                forceReindex: false,
+            });
+        } catch (indexErr) {
+            // Don't block upload if indexing fails; keep the book available.
+            console.error('Failed to index embeddings for uploaded book:', indexErr.message);
+        }
 
         return normalizeBook(inserted);
     } catch (err) {

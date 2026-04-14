@@ -62,17 +62,75 @@ async function storeEmbeddings(bookId, chunks) {
         // If a vector is provided, store it via raw SQL (pgvector)
         if (chunk.vector && Array.isArray(chunk.vector)) {
             const vectorStr = `[${chunk.vector.join(',')}]`;
-            await prisma.$executeRawUnsafe(
-                `UPDATE embeddings SET vector = $1::vector WHERE id = $2`,
-                vectorStr,
-                embedding.id
-            );
+            try {
+                await prisma.$executeRawUnsafe(
+                    `UPDATE embeddings SET vector = $1::vector WHERE id = $2`,
+                    vectorStr,
+                    embedding.id
+                );
+            } catch (_err) {
+                // Some environments don't have pgvector column yet.
+                // Keep the text chunk row so RAG can still use text/catalog fallback.
+            }
         }
 
         results.push(embedding);
     }
 
     return { stored: results.length, embeddings: results };
+}
+
+function splitIntoChunks(text, chunkSize = 900, overlap = 120) {
+    const clean = (text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    if (clean.length <= chunkSize) return [clean];
+
+    const chunks = [];
+    let start = 0;
+    while (start < clean.length) {
+        const end = Math.min(start + chunkSize, clean.length);
+        chunks.push(clean.slice(start, end));
+        if (end >= clean.length) break;
+        start = Math.max(0, end - overlap);
+    }
+    return chunks;
+}
+
+async function indexBookEmbeddings({ bookId, title, author, description, pdfUrl, forceReindex = false }) {
+    if (!bookId) throw new AppError('bookId is required for indexing.', 400);
+
+    const book = await prisma.book.findUnique({ where: { id: bookId } });
+    if (!book) throw new AppError('Book not found.', 404);
+
+    if (forceReindex) {
+        await prisma.embedding.deleteMany({ where: { bookId } });
+    } else {
+        const existingCount = await prisma.embedding.count({ where: { bookId } });
+        if (existingCount > 0) {
+            return { stored: 0, skipped: true, reason: 'already_indexed' };
+        }
+    }
+
+    const sourceText = [
+        `Title: ${title || book.title || ''}`,
+        `Author: ${author || book.author || ''}`,
+        description ? `Description: ${description}` : '',
+        pdfUrl ? `PDF Path: ${pdfUrl}` : '',
+    ].filter(Boolean).join('\n');
+
+    const chunkTexts = splitIntoChunks(sourceText);
+    if (chunkTexts.length === 0) {
+        return { stored: 0, skipped: true, reason: 'no_text' };
+    }
+
+    const chunks = [];
+    for (const content of chunkTexts) {
+        const vector = await generateEmbedding(content);
+        chunks.push({ content, vector });
+    }
+
+    const stored = await storeEmbeddings(bookId, chunks);
+    return { ...stored, skipped: false };
 }
 
 /**
@@ -103,15 +161,49 @@ async function askQuestion(bookId, question, queryVector, topK = 5) {
             take: safeTopK,
         });
 
+        const mapped = textResults.map(e => ({
+            id: e.id,
+            content: e.content,
+            book: e.book ? { id: e.book.id, title: e.book.title, author: e.book.author } : null,
+        }));
+
+        // If embeddings table has no useful rows, fall back to lightweight book catalog search.
+        if (mapped.length === 0) {
+            const catalogWhere = bookId
+                ? { id: bookId }
+                : {
+                    OR: [
+                        { title: { contains: question, mode: 'insensitive' } },
+                        { author: { contains: question, mode: 'insensitive' } },
+                        { description: { contains: question, mode: 'insensitive' } },
+                    ],
+                };
+
+            const catalogBooks = await prisma.book.findMany({
+                where: catalogWhere,
+                select: { id: true, title: true, author: true, description: true, genre: true },
+                take: safeTopK,
+            });
+
+            const catalogResults = catalogBooks.map((b) => ({
+                id: `book-${b.id}`,
+                content: [b.title, b.author, b.genre, b.description].filter(Boolean).join(' | '),
+                book: { id: b.id, title: b.title, author: b.author },
+            }));
+
+            return {
+                book: book ? { id: book.id, title: book.title } : null,
+                question,
+                method: 'catalog_search',
+                results: catalogResults,
+            };
+        }
+
         return {
             book: book ? { id: book.id, title: book.title } : null,
             question,
             method: 'text_search',
-            results: textResults.map(e => ({
-                id: e.id,
-                content: e.content,
-                book: e.book ? { id: e.book.id, title: e.book.title, author: e.book.author } : null,
-            })),
+            results: mapped,
         };
     };
 
@@ -166,11 +258,6 @@ async function askQuestion(bookId, question, queryVector, topK = 5) {
 
 async function generateAnswer(question, retrievalResult) {
     const contextChunks = retrievalResult?.results || [];
-
-    if (contextChunks.length === 0) {
-        return 'I could not find relevant context in the indexed library content for that question yet.';
-    }
-
     const contextText = contextChunks
         .map((item, index) => {
             const label = item.book?.title ? `${item.book.title}` : 'Unknown book';
@@ -179,7 +266,28 @@ async function generateAnswer(question, retrievalResult) {
         .join('\n\n');
 
     if (!hasOpenRouterKey()) {
+        if (contextChunks.length === 0) {
+            return 'AI answer is unavailable because OPENROUTER_API_KEY is not configured.';
+        }
         return `I found relevant context, but OPENROUTER_API_KEY is not configured.\n\nTop context:\n${contextText.slice(0, 1200)}`;
+    }
+
+    if (contextChunks.length === 0) {
+        const completion = await callOpenRouter('/chat/completions', {
+            model: OPENROUTER_CHAT_MODEL,
+            temperature: 0.3,
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are OpenShelf assistant. The internal index has no direct match, so give a helpful general answer and mention this briefly.',
+                },
+                {
+                    role: 'user',
+                    content: question,
+                },
+            ],
+        });
+        return completion?.choices?.[0]?.message?.content?.trim() || 'No answer generated.';
     }
 
     const completion = await callOpenRouter('/chat/completions', {
@@ -221,4 +329,4 @@ async function generateEmbedding(text) {
     return Array.isArray(vector) ? vector : [];
 }
 
-module.exports = { storeEmbeddings, askQuestion, generateEmbedding, generateAnswer };
+module.exports = { storeEmbeddings, askQuestion, generateEmbedding, generateAnswer, indexBookEmbeddings };
