@@ -73,7 +73,7 @@ async function ensureUserProfileFromAuth(authUser, profile = {}) {
     });
     const role = profile.role || existing?.role || 'USER';
 
-    return prisma.user.upsert({
+    const updatedUser = await prisma.user.upsert({
         where: { id: authUser.id },
         update: {
             email,
@@ -95,8 +95,20 @@ async function ensureUserProfileFromAuth(authUser, profile = {}) {
         select: {
             id: true, email: true, name: true, role: true, isPremium: true,
             phone: true, address: true, fineBalance: true, totalFinesPaid: true, avatarUrl: true, createdAt: true,
+            _count: {
+                select: {
+                    circulations: {
+                        where: { type: 'BORROW', returnDate: null }
+                    }
+                }
+            }
         },
     });
+
+    const borrowedCount = updatedUser._count?.circulations || 0;
+    delete updatedUser._count;
+
+    return { ...updatedUser, borrowedCount };
 }
 
 async function getProfileByAuthId(authUserId) {
@@ -105,10 +117,21 @@ async function getProfileByAuthId(authUserId) {
         select: {
             id: true, email: true, name: true, role: true, isPremium: true,
             phone: true, address: true, fineBalance: true, totalFinesPaid: true, avatarUrl: true, createdAt: true,
+            _count: {
+                select: {
+                    circulations: {
+                        where: { type: 'BORROW', returnDate: null }
+                    }
+                }
+            }
         },
     });
     if (!user) throw new AppError('User profile not found. Please complete profile sync.', 404);
-    return user;
+    
+    const borrowedCount = user._count?.circulations || 0;
+    delete user._count;
+    
+    return { ...user, borrowedCount };
 }
 
 async function updateProfile(userId, data) {
