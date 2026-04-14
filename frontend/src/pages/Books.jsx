@@ -17,7 +17,7 @@ import { toast } from 'react-toastify';
 import api from '../api/axios';
 
 // Import icons
-import { BookOpen, Search, Filter, BookCopy, Bookmark, UploadCloud } from 'lucide-react';
+import { BookOpen, Search, Filter, BookCopy, Bookmark, UploadCloud, Pencil, Trash2, X } from 'lucide-react';
 
 export default function Books() {
   const dispatch = useDispatch(); // used to dispatch Redux actions
@@ -34,6 +34,15 @@ export default function Books() {
   // State for genre filter
   const [genreFilter, setGenreFilter] = useState('');
   const [dragOverId, setDragOverId] = useState(null);
+  const [editingBook, setEditingBook] = useState(null);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    author: '',
+    genre: '',
+    description: '',
+    status: 'AVAILABLE',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -134,6 +143,64 @@ export default function Books() {
       dispatch(fetchBooks());
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to upload cover');
+    }
+  };
+
+  const openEditModal = (e, book) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingBook(book);
+    setEditForm({
+      title: book.title || '',
+      author: book.author || '',
+      genre: book.genre || '',
+      description: book.description || '',
+      status: book.status || 'AVAILABLE',
+    });
+  };
+
+  const closeEditModal = () => {
+    setEditingBook(null);
+    setSavingEdit(false);
+  };
+
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    if (!editingBook) return;
+
+    try {
+      setSavingEdit(true);
+      await api.put(`/books/${editingBook.id}`, {
+        title: editForm.title,
+        author: editForm.author,
+        genre: editForm.genre || null,
+        description: editForm.description || null,
+        status: editForm.status,
+      });
+      toast.success('Book updated successfully!');
+      closeEditModal();
+      dispatch(fetchBooks());
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update book');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteBook = async (e, book) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (user?.role !== 'ADMIN') return;
+
+    const confirmed = window.confirm(`Delete "${book.title}" permanently?`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/books/${book.id}`);
+      toast.success('Book deleted successfully!');
+      dispatch(fetchBooks());
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete book');
     }
   };
 
@@ -289,6 +356,23 @@ export default function Books() {
                   <Bookmark className="w-3.5 h-3.5" /> Reserve
                 </button>
               </div>
+
+              {user?.role === 'ADMIN' && (
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={(e) => openEditModal(e, book)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-all"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteBook(e, book)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/20 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
+                </div>
+              )}
             </div>
             </div>
           </Link>
@@ -379,6 +463,84 @@ export default function Books() {
           >
             Next →
           </button>
+        </div>
+      )}
+
+      {editingBook && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-100">Edit Book</h2>
+              <button onClick={closeEditModal} className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/50">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSave} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Title *</label>
+                  <input
+                    className="input-field"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Author *</label>
+                  <input
+                    className="input-field"
+                    value={editForm.author}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, author: e.target.value }))}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Genre</label>
+                  <input
+                    className="input-field"
+                    value={editForm.genre}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, genre: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Status</label>
+                  <select
+                    className="input-field"
+                    value={editForm.status}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option value="AVAILABLE">AVAILABLE</option>
+                    <option value="BORROWED">BORROWED</option>
+                    <option value="RESERVED">RESERVED</option>
+                    <option value="DIGITAL_ONLY">DIGITAL_ONLY</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <textarea
+                  className="input-field h-24 resize-none"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="submit" disabled={savingEdit} className="btn-primary">
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button type="button" onClick={closeEditModal} className="btn-secondary">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

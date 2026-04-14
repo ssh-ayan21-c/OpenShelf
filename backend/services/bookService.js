@@ -39,6 +39,7 @@ function pickBookFields(data = {}) {
     if ('isbn' in data) fields.isbn = data.isbn;
     if ('price' in data) fields.price = data.price;
     if ('rentPrice' in data || 'rent_price' in data) fields.rent_price = data.rentPrice ?? data.rent_price;
+    if ('status' in data) fields.status = data.status;
     
     if ('coverUrl' in data || 'cover_url' in data) fields.coverUrl = data.coverUrl ?? data.cover_url;
     if ('thumbnailUrl' in data || 'thumbnail_url' in data) fields.thumbnailUrl = data.thumbnailUrl ?? data.thumbnail_url;
@@ -49,8 +50,8 @@ function pickBookFields(data = {}) {
     if ('availableCopies' in data || 'available_copies' in data) fields.available_copies = data.availableCopies ?? data.available_copies;
     if ('isPremium' in data || 'is_premium' in data) fields.is_premium = data.isPremium ?? data.is_premium;
     if ('isDigital' in data) fields.isDigital = data.isDigital;
-    if ('physicalCount' in data) fields.physicalCount = data.physicalCount;
-    if ('digitalCount' in data) fields.digitalCount = data.digitalCount;
+    if ('physicalCount' in data || 'physical_count' in data) fields.physicalCount = data.physicalCount ?? data.physical_count;
+    if ('digitalCount' in data || 'digital_count' in data) fields.digitalCount = data.digitalCount ?? data.digital_count;
     
     return fields;
 }
