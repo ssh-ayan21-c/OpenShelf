@@ -1,13 +1,14 @@
 // Import React hooks
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 // Import Redux hooks
 import { useSelector, useDispatch } from 'react-redux';
 
+// Import routing
+import { Link } from 'react-router-dom';
+
 // Import async action to fetch books
 import { fetchBooks } from '../store/slices/bookSlice';
-import { fetchMe } from '../store/slices/authSlice';
 
 // Import toast notifications
 import { toast } from 'react-toastify';
@@ -15,8 +16,9 @@ import { toast } from 'react-toastify';
 // Import axios instance
 import api from '../api/axios';
 
-import { BookOpen, Search, Filter, BookCopy, Bookmark, UploadCloud, MessageSquare } from 'lucide-react';
-import ReviewsModal from '../components/ReviewsModal';
+// Import icons
+import { BookOpen, Search, Filter, BookCopy, Bookmark, UploadCloud } from 'lucide-react';
+
 export default function Books() {
   const dispatch = useDispatch(); // used to dispatch Redux actions
 
@@ -33,13 +35,19 @@ export default function Books() {
   const [genreFilter, setGenreFilter] = useState('');
   const [dragOverId, setDragOverId] = useState(null);
 
-  // State for reviews modal
-  const [selectedBookForReviews, setSelectedBookForReviews] = useState(null);
+  // State for pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const booksPerPage = 20;
 
   // Fetch books when component loads
   useEffect(() => {
     dispatch(fetchBooks());
   }, [dispatch]);
+
+  // Reset to page 1 when search or filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, genreFilter]);
 
   // Extract unique genres from books
   const genres = [...new Set(books.map(b => b.genre).filter(Boolean))];
@@ -57,6 +65,12 @@ export default function Books() {
     return matchSearch && matchGenre;
   });
 
+  // Calculate pagination
+  const totalPages = Math.ceil(filtered.length / booksPerPage);
+  const startIndex = (currentPage - 1) * booksPerPage;
+  const endIndex = startIndex + booksPerPage;
+  const paginatedBooks = filtered.slice(startIndex, endIndex);
+
   // Function to borrow a book
   const handleBorrow = async (bookId) => {
     try {
@@ -66,9 +80,8 @@ export default function Books() {
       // Show success message
       toast.success('Book borrowed successfully!');
 
-      // Refresh book list and user profile
+      // Refresh book list
       dispatch(fetchBooks());
-      dispatch(fetchMe());
     } catch (err) {
       // Show error message
       toast.error(err.response?.data?.message || 'Failed to borrow');
@@ -134,7 +147,7 @@ export default function Books() {
         <div>
           <h1 className="text-2xl font-bold text-gray-100">Library Catalog</h1>
           <p className="text-gray-500 mt-1">
-            {filtered.length} books available
+            {filtered.length} books available {totalPages > 1 && `(Page ${currentPage} of ${totalPages})`}
           </p>
         </div>
       </div>
@@ -175,9 +188,10 @@ export default function Books() {
       {/* Book grid layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 
-        {/* Loop through filtered books */}
-        {filtered.map((book) => (
-          <div key={book.id} className="glass-card overflow-hidden card-hover group">
+        {/* Loop through paginated books */}
+        {paginatedBooks.map((book) => (
+          <Link key={book.id} to={`/books/${book.id}`} className="block">
+            <div className="glass-card overflow-hidden card-hover group h-full flex flex-col">
             {/* Cover */}
             <div
               className={`h-40 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center relative overflow-hidden transition-all ${dragOverId === book.id ? 'ring-2 ring-emerald-500 scale-105' : ''}`}
@@ -185,9 +199,9 @@ export default function Books() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, book.id)}
             >
-              {(book.thumbnailUrl || book.coverUrl || book.cover_url) ? (
+              {book.coverUrl ? (
                 <>
-                  <img src={book.thumbnailUrl || book.coverUrl || book.cover_url} alt={book.title} className="w-full h-full object-cover" />
+                  <img src={book.coverUrl} alt={book.title} className="w-full h-full object-cover" />
                   {dragOverId === book.id && (
                     <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center fade-in">
                       <UploadCloud className="w-8 h-8 text-emerald-400 mb-2" />
@@ -219,10 +233,10 @@ export default function Books() {
 
                 <span
                   className={`badge text-[10px] ${book.status === 'AVAILABLE'
-                      ? 'badge-success'
-                      : book.status === 'BORROWED'
-                        ? 'badge-warning'
-                        : 'badge-neutral'
+                    ? 'badge-success'
+                    : book.status === 'BORROWED'
+                      ? 'badge-warning'
+                      : 'badge-neutral'
                     }`}
                 >
                   {book.status}
@@ -249,16 +263,14 @@ export default function Books() {
 
               {/* Action buttons */}
               <div className="flex gap-2">
-                <Link
-                  to={`/books/${book.id}`}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-700/40 text-gray-200 text-sm font-medium hover:bg-gray-700/60 transition-all"
-                >
-                  Details
-                </Link>
 
                 {/* Borrow button */}
                 <button
-                  onClick={() => handleBorrow(book.id)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleBorrow(book.id);
+                  }}
                   disabled={book.status !== 'AVAILABLE'} // disable if not available
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 text-sm font-medium hover:bg-emerald-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                 >
@@ -267,23 +279,19 @@ export default function Books() {
 
                 {/* Reserve button */}
                 <button
-                  onClick={() => handleReserve(book.id)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleReserve(book.id);
+                  }}
                   className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 text-sm font-medium hover:bg-cyan-500/20 transition-all"
                 >
                   <Bookmark className="w-3.5 h-3.5" /> Reserve
                 </button>
-                
-                {/* Reviews Button */}
-                <button
-                  onClick={() => setSelectedBookForReviews(book)}
-                  className="flex items-center justify-center p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-all"
-                  title="View Reviews"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                </button>
               </div>
             </div>
-          </div>
+            </div>
+          </Link>
         ))}
       </div>
 
@@ -294,12 +302,84 @@ export default function Books() {
         </div>
       )}
 
-      {/* Render Reviews Modal dynamically if selected */}
-      {selectedBookForReviews && (
-          <ReviewsModal 
-             book={selectedBookForReviews} 
-             onClose={() => setSelectedBookForReviews(null)} 
-          />
+      {/* Pagination controls */}
+      {filtered.length > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 py-8">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className="px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 font-medium hover:bg-emerald-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            ← Previous
+          </button>
+
+          <div className="flex items-center gap-2">
+            {totalPages <= 5 ? (
+              Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-3 py-2 rounded-lg font-medium transition-all ${
+                    currentPage === page
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))
+            ) : (
+              <>
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  className={`px-3 py-2 rounded-lg font-medium transition-all ${
+                    currentPage === 1
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  1
+                </button>
+                {currentPage > 3 && <span className="text-gray-500">...</span>}
+                {Array.from({ length: Math.min(3, totalPages - 2) }, (_, i) => {
+                  const page = Math.max(2, currentPage - 1) + i;
+                  return page < totalPages ? (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-2 rounded-lg font-medium transition-all ${
+                        currentPage === page
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ) : null;
+                })}
+                {currentPage < totalPages - 2 && <span className="text-gray-500">...</span>}
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  className={`px-3 py-2 rounded-lg font-medium transition-all ${
+                    currentPage === totalPages
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {totalPages}
+                </button>
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+            className="px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 font-medium hover:bg-emerald-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            Next →
+          </button>
+        </div>
       )}
     </div>
   );

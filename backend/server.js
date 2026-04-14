@@ -32,7 +32,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
     .filter(Boolean);
 
 if (process.env.NODE_ENV !== 'production') {
-    allowedOrigins.push('http://localhost:5173', 'http://127.0.0.1:5173');
+    allowedOrigins.push('http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174');
 }
 
 app.set('trust proxy', 1);

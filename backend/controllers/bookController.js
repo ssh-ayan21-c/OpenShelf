@@ -94,6 +94,19 @@ async function uploadCover(req, res, next) {
     }
 }
 
+async function uploadPdf(req, res, next) {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'PDF file is required.' });
+        }
+
+        const book = await bookService.uploadPdfBook(req.params.id, req.file);
+        res.json({ success: true, data: book, message: 'PDF uploaded successfully!' });
+    } catch (err) {
+        next(err);
+    }
+}
+
 async function read(req, res, next) {
     try {
         const data = await bookService.getDigitalReadUrl(req.params.id, req.user.id);
@@ -112,4 +125,4 @@ async function rent(req, res, next) {
     }
 }
 
-module.exports = { list, getById, create, update, remove, uploadCharity, uploadCover, read, rent };
+module.exports = { list, getById, create, update, remove, uploadCharity, uploadCover, uploadPdf, read, rent };

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, requireAdmin } = require('../middlewares/auth');
-const { uploadBookAssets, uploadImage } = require('../middlewares/upload');
+const { uploadBookAssets, uploadImage, upload } = require('../middlewares/upload');
 const bookController = require('../controllers/bookController');
 
 // Public
@@ -17,6 +17,9 @@ router.delete('/:id', authenticate, requireAdmin, bookController.remove);
 
 // Admin cover upload
 router.put('/:id/cover', authenticate, requireAdmin, uploadImage.single('cover'), bookController.uploadCover);
+
+// Admin PDF upload
+router.put('/:id/pdf', authenticate, requireAdmin, upload.single('pdf'), bookController.uploadPdf);
 
 // Charity upload (authenticated)
 router.post('/upload', authenticate, uploadBookAssets, bookController.uploadCharity);

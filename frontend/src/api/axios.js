@@ -14,6 +14,7 @@ if (!API_BASE) {
 const api = axios.create({
   baseURL: API_BASE ? `${API_BASE}/api` : '/api',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 10000, // 10 second timeout
 });
 
 // Attach JWT token to every request

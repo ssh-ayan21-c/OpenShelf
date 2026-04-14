@@ -26,21 +26,33 @@ function normalizeBook(book) {
 }
 
 function pickBookFields(data = {}) {
-    return {
-        title: data.title,
-        author: data.author,
-        isbn: data.isbn,
-        coverUrl: data.coverUrl ?? data.cover_url ?? null,
-        thumbnailUrl: data.thumbnailUrl ?? data.thumbnail_url ?? null,
-        pdfUrl: data.pdfUrl ?? data.pdf_url ?? null,
-        format: data.format,
-        isDigital: data.isDigital ?? data.is_digital,
-        is_digital: data.isDigital ?? data.is_digital,
-        shelf_location: data.shelfLocation ?? data.shelf_location,
-        available_copies: data.availableCopies ?? data.available_copies,
-        is_premium: data.isPremium ?? data.is_premium,
-        embedding: data.embedding ?? null,
-    };
+    const fields = {};
+    
+    // Only include fields that were explicitly provided
+    if ('title' in data) fields.title = data.title;
+    if ('author' in data) fields.author = data.author;
+    if ('description' in data) fields.description = data.description;
+    if ('genre' in data) fields.genre = data.genre;
+    if ('publisher' in data) fields.publisher = data.publisher;
+    if ('year' in data) fields.year = data.year;
+    if ('edition' in data) fields.edition = data.edition;
+    if ('isbn' in data) fields.isbn = data.isbn;
+    if ('price' in data) fields.price = data.price;
+    if ('rentPrice' in data || 'rent_price' in data) fields.rent_price = data.rentPrice ?? data.rent_price;
+    
+    if ('coverUrl' in data || 'cover_url' in data) fields.coverUrl = data.coverUrl ?? data.cover_url;
+    if ('thumbnailUrl' in data || 'thumbnail_url' in data) fields.thumbnailUrl = data.thumbnailUrl ?? data.thumbnail_url;
+    if ('pdfUrl' in data || 'pdf_url' in data) fields.pdfUrl = data.pdfUrl ?? data.pdf_url;
+    
+    if ('format' in data) fields.format = data.format;
+    if ('shelfLocation' in data || 'shelf_location' in data) fields.shelf_location = data.shelfLocation ?? data.shelf_location;
+    if ('availableCopies' in data || 'available_copies' in data) fields.available_copies = data.availableCopies ?? data.available_copies;
+    if ('isPremium' in data || 'is_premium' in data) fields.is_premium = data.isPremium ?? data.is_premium;
+    if ('isDigital' in data) fields.isDigital = data.isDigital;
+    if ('physicalCount' in data) fields.physicalCount = data.physicalCount;
+    if ('digitalCount' in data) fields.digitalCount = data.digitalCount;
+    
+    return fields;
 }
 
 function resolveBookFormat(book) {
@@ -357,7 +369,49 @@ async function uploadCoverBook(id, coverFile) {
     return normalizeBook(data);
 }
 
-function buildStoragePath(prefix, originalName = '') {
+async function uploadPdfBook(id, pdfFile) {
+    if (!pdfFile?.buffer) {
+        throw new AppError('PDF file buffer is required.', 400);
+    }
+
+    const pdfStoragePath = buildStoragePath('pdfs', pdfFile.originalname);
+    const pdfUpload = await supabaseAdmin.storage
+        .from('pdfs')
+        .upload(pdfStoragePath, pdfFile.buffer, {
+            contentType: pdfFile.mimetype,
+            upsert: false,
+        });
+
+    if (pdfUpload.error) {
+        throw new AppError(`Failed to upload PDF: ${pdfUpload.error.message}`, 500);
+    }
+
+    const { data: publicUrlData } = supabaseAdmin.storage
+        .from('pdfs')
+        .getPublicUrl(pdfStoragePath);
+
+    const { data, error } = await supabaseAdmin
+        .from('books')
+        .update({
+            pdfUrl: publicUrlData.publicUrl,
+        })
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+
+    if (error) {
+        await deleteObjectIfExists('pdfs', pdfStoragePath);
+
+        if (error.code === 'PGRST116') {
+            throw new AppError('Book not found.', 404);
+        }
+        throw new AppError(`Failed to update PDF URL: ${error.message}`, 500);
+    }
+
+    return normalizeBook(data);
+}
+
+function buildStoragePath(prefix, originalName) {
     const ext = path.extname(originalName).toLowerCase();
     const safeExt = ext && ext.length <= 10 ? ext : '';
     return `${prefix}/${Date.now()}-${crypto.randomUUID()}${safeExt}`;
@@ -608,6 +662,7 @@ module.exports = {
     uploadCharityBookToSupabase,
     updateBookStatus,
     uploadCoverBook,
+    uploadPdfBook,
     getDigitalReadUrl,
     rentDigitalAccess,
 };

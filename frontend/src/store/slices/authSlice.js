@@ -4,22 +4,61 @@ import { supabase } from '../../supabaseClient';
 
 export const loginUser = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
   try {
-    const { data: authData, error } = await supabase.auth.signInWithPassword({
+    // First, authenticate with Supabase
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: credentials.email,
       password: credentials.password,
     });
-    if (error) throw error;
 
-    await api.post('/users/bootstrap-profile', {
-      name: authData.user?.user_metadata?.name || credentials.email.split('@')[0],
-    });
+    // If Supabase auth fails, return error
+    if (authError) {
+      return rejectWithValue(authError.message || 'Invalid email or password');
+    }
 
-    const { data } = await api.get('/users/me');
-    const user = data.data || data;
-    localStorage.setItem('user', JSON.stringify(user));
-    return { user, token: authData.session?.access_token || null };
+    if (!authData?.user || !authData?.session) {
+      return rejectWithValue('Login failed: No session returned');
+    }
+
+    const token = authData.session.access_token;
+    const user = authData.user;
+
+    // Try to bootstrap profile on backend
+    try {
+      await api.post('/users/bootstrap-profile', {
+        name: user.user_metadata?.name || credentials.email.split('@')[0],
+      });
+    } catch (bootstrapErr) {
+      console.warn('Profile bootstrap failed during login:', bootstrapErr);
+      // Don't fail login just because bootstrap failed
+    }
+
+    // Try to fetch full user profile
+    let userProfile = null;
+    try {
+      const { data } = await api.get('/users/me');
+      userProfile = data.data || data;
+    } catch (fetchErr) {
+      console.warn('Failed to fetch user profile:', fetchErr);
+      // If profile fetch fails but auth succeeded, use basic user info
+      userProfile = {
+        id: user.id,
+        email: user.email,
+        name: user.user_metadata?.name || credentials.email.split('@')[0],
+        role: 'USER',
+        isPremium: false,
+      };
+    }
+
+    // Store user and token
+    localStorage.setItem('user', JSON.stringify(userProfile));
+    return { user: userProfile, token };
   } catch (err) {
-    return rejectWithValue(err.response?.data?.message || err.message || 'Login failed');
+    console.error('Login error:', err);
+    // Extract meaningful error message
+    if (err.message?.includes('Invalid login credentials')) {
+      return rejectWithValue('Invalid email or password');
+    }
+    return rejectWithValue(err.message || 'Login failed. Please try again.');
   }
 });
 
@@ -30,30 +69,55 @@ export const registerUser = createAsyncThunk('auth/register', async (userData, {
       password: userData.password,
       options: {
         data: { name: userData.name },
+        emailRedirectTo: `${window.location.origin}/login`,
       },
     });
-    if (error) throw error;
+    
+    // Handle Supabase signup errors
+    if (error) {
+      // Check if user already exists
+      if (error.message?.includes('already registered') || error.message?.includes('User already exists')) {
+        return rejectWithValue('This email is already registered. Please sign in instead.');
+      }
+      return rejectWithValue(error.message || 'Signup failed');
+    }
+
+    if (!authData.user) {
+      return rejectWithValue('Signup failed: No user returned');
+    }
 
     const sessionToken = authData.session?.access_token;
-    if (!authData.user) throw new Error('Supabase sign up did not return a user.');
 
+    // If email verification is required, don't try to bootstrap profile
     if (!sessionToken) {
       return {
         user: null,
         token: null,
         requiresEmailVerification: true,
-        message: 'Signup successful. Please verify your email, then sign in.',
+        message: 'Signup successful! Please check your email to verify your account, then sign in.',
       };
     }
 
-    await api.post('/users/bootstrap-profile', { name: userData.name });
-    const { data } = await api.get('/users/me');
-    const user = data.data || data;
-    localStorage.setItem('user', JSON.stringify(user));
-
-    return { user, token: sessionToken, requiresEmailVerification: false };
+    // Try to bootstrap profile only if we have a session token
+    try {
+      await api.post('/users/bootstrap-profile', { name: userData.name });
+      const { data } = await api.get('/users/me');
+      const user = data.data || data;
+      localStorage.setItem('user', JSON.stringify(user));
+      return { user, token: sessionToken, requiresEmailVerification: false };
+    } catch (apiErr) {
+      // If profile bootstrap fails but auth succeeded, still mark as successful for email verification
+      console.error('Profile bootstrap error:', apiErr);
+      return {
+        user: null,
+        token: sessionToken,
+        requiresEmailVerification: true,
+        message: 'Account created! Please verify your email to complete setup.',
+      };
+    }
   } catch (err) {
-    return rejectWithValue(err.response?.data?.message || err.message || 'Registration failed');
+    console.error('Registration error:', err);
+    return rejectWithValue(err.message || 'Registration failed. Please try again.');
   }
 });
 
@@ -62,7 +126,11 @@ export const fetchMe = createAsyncThunk('auth/me', async (_, { rejectWithValue }
     const { data } = await api.get('/users/me');
     return data.data || data;
   } catch (err) {
-    return rejectWithValue(err.response?.data?.message || 'Failed to fetch user');
+    const errorMsg = err.response?.data?.message || err.message;
+    if (err.code === 'ECONNABORTED') {
+      return rejectWithValue('Request timeout. Backend may be unavailable.');
+    }
+    return rejectWithValue(errorMsg || 'Failed to fetch user');
   }
 });
 
@@ -70,21 +138,44 @@ export const initializeAuth = createAsyncThunk('auth/initialize', async (_, { re
   try {
     const { data } = await supabase.auth.getSession();
     const session = data.session;
+    
     if (!session) {
       localStorage.removeItem('user');
       return { user: null, token: null, isAuthenticated: false };
     }
 
-    await api.post('/users/bootstrap-profile', {
-      name: session.user?.user_metadata?.name,
-    });
-    const me = await api.get('/users/me');
-    const user = me.data.data || me.data;
-    localStorage.setItem('user', JSON.stringify(user));
+    // Try to bootstrap profile
+    try {
+      await api.post('/users/bootstrap-profile', {
+        name: session.user?.user_metadata?.name,
+      });
+    } catch (bootstrapErr) {
+      console.warn('Profile bootstrap failed during initialization:', bootstrapErr);
+      // Continue even if bootstrap fails
+    }
 
+    // Try to fetch user profile
+    let user = null;
+    try {
+      const { data: userData } = await api.get('/users/me');
+      user = userData.data || userData;
+    } catch (fetchErr) {
+      console.warn('Failed to fetch user profile during initialization:', fetchErr);
+      // If fetch fails but session exists, create basic user info
+      user = {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.user_metadata?.name || session.user.email.split('@')[0],
+        role: 'USER',
+        isPremium: false,
+      };
+    }
+
+    localStorage.setItem('user', JSON.stringify(user));
     return { user, token: session.access_token, isAuthenticated: true };
   } catch (err) {
-    return rejectWithValue(err.response?.data?.message || err.message || 'Failed to initialize auth');
+    console.error('Auth initialization error:', err);
+    return rejectWithValue(err.message || 'Failed to initialize auth');
   }
 });
 
@@ -117,6 +208,7 @@ const authSlice = createSlice({
     token: null,
     loading: false,
     error: null,
+    successMessage: null,
     isAuthenticated: false,
     bootstrapped: false,
   },
@@ -127,10 +219,12 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.bootstrapped = true;
       state.error = null;
+      state.successMessage = null;
       localStorage.removeItem('user');
     },
     clearError: (state) => {
       state.error = null;
+      state.successMessage = null;
     },
   },
   extraReducers: (builder) => {
@@ -143,14 +237,16 @@ const authSlice = createSlice({
         state.isAuthenticated = true;
       })
       .addCase(loginUser.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
-      .addCase(registerUser.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(registerUser.pending, (state) => { state.loading = true; state.error = null; state.successMessage = null; })
       .addCase(registerUser.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload.user;
         state.token = action.payload.token;
         state.isAuthenticated = !!action.payload.user;
         if (action.payload.requiresEmailVerification) {
-          state.error = action.payload.message;
+          state.successMessage = action.payload.message;
+        } else {
+          state.successMessage = null;
         }
       })
       .addCase(registerUser.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
