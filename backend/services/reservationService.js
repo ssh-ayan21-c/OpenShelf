@@ -122,9 +122,46 @@ async function getAllReservations() {
             user: { select: { id: true, name: true, email: true } },
             book: { select: { id: true, title: true, author: true, isbn: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+            { status: 'asc' },
+            { createdAt: 'desc' },
+        ],
     });
 }
 
-module.exports = { createReservation, getUserReservations, cancelReservation, processNextReservation, getAllReservations };
+/**
+ * Admin updates reservation status (fulfill/cancel).
+ */
+async function updateReservationStatusByAdmin(reservationId, status) {
+    if (!['FULFILLED', 'CANCELLED'].includes(status)) {
+        throw new AppError('Invalid status. Allowed values: FULFILLED, CANCELLED.', 400);
+    }
 
+    const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } });
+    if (!reservation) throw new AppError('Reservation not found.', 404);
+    if (reservation.status !== 'PENDING') {
+        throw new AppError('Only pending reservations can be updated.', 400);
+    }
+
+    const updated = await prisma.reservation.update({
+        where: { id: reservationId },
+        data: { status },
+        include: {
+            user: { select: { id: true, name: true, email: true } },
+            book: { select: { id: true, title: true, author: true, isbn: true } },
+        },
+    });
+
+    await reorderQueue(reservation.bookId);
+    await updateBookStatus(reservation.bookId);
+    return updated;
+}
+
+module.exports = {
+    createReservation,
+    getUserReservations,
+    cancelReservation,
+    processNextReservation,
+    getAllReservations,
+    updateReservationStatusByAdmin,
+};

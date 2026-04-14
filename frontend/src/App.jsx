@@ -16,6 +16,7 @@ const AddBook = lazy(() => import('./pages/AddBook'));
 const BorrowedBooks = lazy(() => import('./pages/BorrowedBooks'));
 const AllBorrowedBooks = lazy(() => import('./pages/AllBorrowedBooks'));
 const MyReservations = lazy(() => import('./pages/MyReservations'));
+const ManageReservations = lazy(() => import('./pages/ManageReservations'));
 const MyFines = lazy(() => import('./pages/MyFines'));
 const ManageFines = lazy(() => import('./pages/ManageFines'));
 const MyTransactions = lazy(() => import('./pages/MyTransactions'));
@@ -69,6 +70,7 @@ export default function App() {
             <Route path="borrowed" element={<BorrowedBooks />} />
             <Route path="borrowed/all" element={<ProtectedRoute adminOnly><AllBorrowedBooks /></ProtectedRoute>} />
             <Route path="reservations" element={<MyReservations />} />
+            <Route path="reservations/manage" element={<ProtectedRoute adminOnly><ManageReservations /></ProtectedRoute>} />
             <Route path="fines" element={<MyFines />} />
             <Route path="fines/manage" element={<ProtectedRoute adminOnly><ManageFines /></ProtectedRoute>} />
             <Route path="transactions" element={<MyTransactions />} />

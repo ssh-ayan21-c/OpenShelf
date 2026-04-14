@@ -47,4 +47,14 @@ async function allReservations(req, res, next) {
     }
 }
 
-module.exports = { create, myReservations, cancel, processNext, allReservations };
+async function updateStatus(req, res, next) {
+    try {
+        const { status } = req.body || {};
+        const result = await reservationService.updateReservationStatusByAdmin(req.params.id, status);
+        res.json({ success: true, data: result });
+    } catch (err) {
+        next(err);
+    }
+}
+
+module.exports = { create, myReservations, cancel, processNext, allReservations, updateStatus };

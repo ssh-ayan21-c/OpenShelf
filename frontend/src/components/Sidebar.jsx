@@ -21,6 +21,7 @@ const navItems = [
 const adminItems = [
   { to: '/books/add', icon: Library, label: 'Add Book' },
   { to: '/borrowed/all', icon: BookCopy, label: 'All Borrowed' },
+  { to: '/reservations/manage', icon: Bookmark, label: 'Manage Reservations' },
   { to: '/fines/manage', icon: DollarSign, label: 'Manage Fines' },
   { to: '/transactions/all', icon: ArrowLeftRight, label: 'All Transactions' },
   { to: '/donations/manage', icon: Gift, label: 'Manage Donations' },

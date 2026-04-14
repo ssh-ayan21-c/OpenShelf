@@ -13,6 +13,6 @@ router.delete('/:id', reservationController.cancel);
 // Admin routes
 router.get('/all', requireAdmin, reservationController.allReservations);
 router.post('/process/:bookId', requireAdmin, reservationController.processNext);
+router.patch('/:id/status', requireAdmin, reservationController.updateStatus);
 
 module.exports = router;
-
