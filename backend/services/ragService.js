@@ -279,7 +279,7 @@ async function generateAnswer(question, retrievalResult) {
             messages: [
                 {
                     role: 'system',
-                    content: 'You are OpenShelf assistant. The internal index has no direct match, so give a helpful general answer and mention this briefly.',
+                    content: 'You are OpenShelf assistant. Give a direct, helpful answer from your knowledge. Do not include meta statements about missing context.',
                 },
                 {
                     role: 'user',
@@ -296,7 +296,7 @@ async function generateAnswer(question, retrievalResult) {
         messages: [
             {
                 role: 'system',
-                content: 'You are OpenShelf RAG assistant. Answer only from provided context. If context is insufficient, clearly say so.',
+                content: 'You are OpenShelf RAG assistant. Use provided context first, then fill gaps with your general knowledge. Give direct answers and avoid meta statements about whether context was sufficient.',
             },
             {
                 role: 'user',

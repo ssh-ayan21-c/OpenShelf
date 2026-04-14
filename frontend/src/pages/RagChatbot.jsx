@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../api/axios';
-import { Bot, Send, User, X } from 'lucide-react';
+import { Bot, Send, User, X, Maximize2, Minimize2 } from 'lucide-react';
 
 export default function RagChatbot({ bookId = null, compact = false, onClose = null }) {
 
@@ -13,6 +13,7 @@ export default function RagChatbot({ bookId = null, compact = false, onClose = n
 
   // State to show loading while waiting for AI response
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // Function to handle sending message
   const handleSend = async () => {
@@ -69,7 +70,13 @@ export default function RagChatbot({ bookId = null, compact = false, onClose = n
   };
 
   return (
-    <div className={`flex flex-col ${compact ? 'h-[28rem]' : 'h-[calc(100vh-8rem)]'}`}>
+    <div
+      className={`flex flex-col ${
+        compact
+          ? `${expanded ? 'w-[36rem] h-[36rem]' : 'w-[24rem] h-[28rem]'}`
+          : 'h-[calc(100vh-8rem)]'
+      }`}
+    >
 
       {/* Header section */}
       <div className="mb-4">
@@ -78,11 +85,22 @@ export default function RagChatbot({ bookId = null, compact = false, onClose = n
             <Bot className={`${compact ? 'w-5 h-5' : 'w-7 h-7'} text-emerald-400`} />
             AI Library Assistant
           </h1>
-          {onClose ? (
-            <button onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/50">
-              <X className="w-4 h-4" />
-            </button>
-          ) : null}
+          <div className="flex items-center gap-1">
+            {compact ? (
+              <button
+                onClick={() => setExpanded((prev) => !prev)}
+                className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/50"
+                title={expanded ? 'Reduce size' : 'Expand size'}
+              >
+                {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </button>
+            ) : null}
+            {onClose ? (
+              <button onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/50">
+                <X className="w-4 h-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
         <p className="text-gray-500 mt-1 text-sm">
           {bookId ? 'Context: current book' : 'Global library mode'}
@@ -135,6 +153,7 @@ export default function RagChatbot({ bookId = null, compact = false, onClose = n
                   ? 'bg-emerald-500/20 text-emerald-100 rounded-br-md'
                   : 'bg-gray-800/50 text-gray-300 rounded-bl-md'
               }`}
+              style={{ whiteSpace: 'pre-wrap' }}
             >
               {msg.content}
             </div>

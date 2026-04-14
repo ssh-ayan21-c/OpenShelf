@@ -71,7 +71,7 @@ export default function BookReader() {
 
       <div className="fixed bottom-6 right-6 z-50">
         {chatOpen ? (
-          <div className="w-[24rem] glass-card p-3 shadow-2xl shadow-emerald-900/20">
+          <div className="glass-card p-3 shadow-2xl shadow-emerald-900/20">
             <RagChatbot bookId={id} compact onClose={() => setChatOpen(false)} />
           </div>
         ) : (
